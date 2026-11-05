@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17111b">
+  <title>The Aethercrypt: Atlas</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="#">
+      <span class="brand-mark">✦</span>
+      <span class="brand-copy">
+        <strong>THE AETHERCRYPT</strong>
+        <small>ATLAS · CARTOGRAPHY STUDIO</small>
+      </span>
+    </a>
+
+    <button class="project-name" id="renameProjectBtn" type="button" title="Click to rename this map">
+      <span class="status-dot"></span>
+      <span id="projectName">Untitled World</span>
+      <span class="rename-hint">✎</span>
+    </button>
+
+    <nav class="top-actions">
+      <button class="btn" id="newBtn">New</button>
+      <button class="btn" id="openBtn">Open</button>
+      <button class="btn" id="saveBtn">Save</button>
+      <button class="btn" id="submapsBtn">Submaps</button>
+      <button class="btn" id="resizeBtn">Canvas size</button>
+      <button class="btn" id="suggestionsBtn">Suggestions</button>
+      <button class="btn" id="aboutBtn">About</button>
+      <button class="btn btn-primary" id="exportBtn">Export PNG</button>
+      <input id="fileInput" type="file" accept=".json,application/json" hidden>
+    </nav>
+  </header>
+
+  <main class="main-layout">
+    <aside class="tool-sidebar">
+      <div class="sidebar-heading">TOOLS</div>
+
+      <div class="tool-group">
+        <div class="group-label">NAVIGATION</div>
+        <button class="tool-btn active" data-tool="select"><span class="tool-icon">↖</span>Select</button>
+        <button class="tool-btn" data-tool="pan"><span class="tool-icon">✥</span>Move canvas</button>
+      </div>
+
+      <div class="tool-group">
+        <div class="group-label">DRAWING</div>
+        <button class="tool-btn" data-tool="land"><span class="tool-icon">◇</span>Land polygon</button>
+        <button class="tool-btn" data-tool="freehand"><span class="tool-icon">〰</span>Freehand land</button>
+        <button class="tool-btn" data-tool="water"><span class="tool-icon">≈</span>Water</button>
+        <button class="tool-btn" data-tool="bucket"><span class="tool-icon">▨</span>Bucket fill</button>
+        <button class="tool-btn" data-tool="mountain"><span class="tool-icon">♟</span>Mountain stamp</button>
+        <button class="tool-btn" data-tool="line"><span class="tool-icon">╱</span>Line</button>
+        <button class="tool-btn" data-tool="eraser"><span class="tool-icon">⌫</span>Eraser</button>
+      </div>
+
+      <div class="tool-group">
+        <div class="group-label">MAP TOOLS</div>
+        <button class="tool-btn" data-tool="label"><span class="tool-icon">T</span>Label</button>
+      </div>
+
+      <div class="tool-tip" id="toolTip">Select a tool to begin.</div>
+    </aside>
+
+    <section class="workspace">
+      <div class="workspace-top">
+        <div id="breadcrumbs" class="breadcrumbs"></div>
+        <div class="view-controls">
+          <button id="undoBtn" class="icon-btn" title="Undo (Ctrl+Z)">↶</button>
+          <button id="redoBtn" class="icon-btn" title="Redo (Ctrl+Y)">↷</button>
+          <button id="zoomOutBtn" class="icon-btn" title="Zoom out">−</button>
+          <span id="zoomLabel">100%</span>
+          <button id="zoomInBtn" class="icon-btn" title="Zoom in">+</button>
+          <button id="fitBtn" class="icon-btn" title="Fit canvas">Fit</button>
+        </div>
+      </div>
+
+      <div id="canvasViewport" class="canvas-viewport">
+        <div id="canvasStage" class="canvas-stage">
+          <svg id="mapCanvas" xmlns="http://www.w3.org/2000/svg"
+               width="2400" height="1600" viewBox="0 0 2400 1600"
+               aria-label="Blank map canvas">
+            <defs>
+              <pattern id="gridPattern" width="40" height="40"
+                       patternUnits="userSpaceOnUse">
+                <path d="M40 0H0V40" fill="none"
+                      stroke="#b5a6b8" stroke-width=".8" opacity=".45"/>
+              </pattern>
+            </defs>
+            <rect id="canvasBackground" width="2400" height="1600" fill="#f2eadb"/>
+            <rect id="canvasGrid" width="2400" height="1600"
+                  fill="url(#gridPattern)" visibility="hidden"
+                  pointer-events="none"/>
+            <g id="mapObjects"></g>
+            <g id="interactionOverlay" pointer-events="none"></g>
+          </svg>
+        </div>
+      </div>
+
+      <footer class="workspace-footer">
+        <span id="canvasInfo">2400 × 1600 px</span>
+        <span id="toolHint">Select a tool to begin.</span>
+        <span>WORLDS FORGOTTEN. STORIES ETERNAL.</span>
+      </footer>
+    </section>
+
+    <aside class="properties-sidebar">
+      <section class="panel">
+        <div class="panel-title">PROPERTIES</div>
+        <p id="selectionMessage">Select an object to edit its properties.</p>
+
+        <div id="objectProperties" hidden>
+          <label for="objectName">Object name</label>
+          <input id="objectName" type="text" placeholder="Name">
+
+          <label for="objectColor">Object color</label>
+          <input id="objectColor" type="color" value="#a1b18a">
+
+          <div id="textProperties" hidden>
+            <label for="textSize">Text size</label>
+            <input id="textSize" type="range" min="10" max="120" value="28">
+            <div class="range-value"><span id="textSizeLabel">28</span> px</div>
+            <label class="check-row">
+              <input id="textCurved" type="checkbox">
+              <span>Curved text</span>
+            </label>
+          </div>
+
+          <button id="createRegionSubmapBtn" class="btn full-width" hidden>
+            Create submap from region
+          </button>
+          <button id="openRegionSubmapBtn" class="btn full-width" hidden>
+            Open linked submap
+          </button>
+          <button id="deleteObjectBtn" class="btn btn-danger full-width">
+            Delete object
+          </button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">BRUSH</div>
+        <label for="brushColor">Brush color</label>
+        <input id="brushColor" type="color" value="#8e718e">
+
+        <label for="brushSize">Brush size</label>
+        <input id="brushSize" type="range" min="1" max="30" value="5">
+        <div class="range-value"><span id="brushSizeLabel">5</span> px</div>
+
+        <label class="check-row">
+          <input id="showGrid" type="checkbox">
+          <span>Show grid</span>
+        </label>
+        <label class="check-row">
+          <input id="snapGrid" type="checkbox">
+          <span>Snap to grid</span>
+        </label>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">LAYERS</div>
+        <div id="layerList" class="layer-list"></div>
+        <button id="addLayerBtn" class="btn full-width">+ Add layer</button>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<dialog id="canvasSizeDialog" class="app-dialog">
+  <form id="canvasSizeForm">
+    <div class="dialog-heading">
+      <div>
+        <div class="eyebrow">WORKSPACE SETTINGS</div>
+        <h2>Canvas dimensions</h2>
+      </div>
+      <button type="button" class="icon-btn" data-close="canvasSizeDialog">×</button>
+    </div>
+    <p>Resize the canvas without deleting your existing drawings.</p>
+    <div class="form-grid">
+      <div>
+        <label for="canvasWidth">Width (px)</label>
+        <input id="canvasWidth" type="number" min="200" max="12000" step="100" value="2400" required>
+      </div>
+      <div>
+        <label for="canvasHeight">Height (px)</label>
+        <input id="canvasHeight" type="number" min="200" max="12000" step="100" value="1600" required>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close="canvasSizeDialog">Cancel</button>
+      <button type="submit" class="btn btn-primary">Apply dimensions</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="submapDialog" class="app-dialog">
+  <div class="dialog-heading">
+    <div>
+      <div class="eyebrow">EXPLORE YOUR WORLD</div>
+      <h2>Submap archive</h2>
+    </div>
+    <button type="button" class="icon-btn" data-close="submapDialog">×</button>
+  </div>
+  <p>Create independent maps for regions, kingdoms, cities, dungeons and more.</p>
+  <form id="createSubmapForm" class="submap-create-form">
+    <div>
+      <label for="submapName">New submap name</label>
+      <input id="submapName" maxlength="80" placeholder="Kingdom of Ashes" required>
+    </div>
+    <button class="btn btn-primary" type="submit">+ Create</button>
+  </form>
+  <div class="archive-heading">MAPS IN THIS PROJECT</div>
+  <div id="submapList" class="submap-list"></div>
+</dialog>
+
+<dialog id="suggestionsDialog" class="app-dialog">
+  <div class="dialog-heading">
+    <div>
+      <div class="eyebrow">HELP SHAPE THE ATLAS</div>
+      <h2>Send a suggestion</h2>
+    </div>
+    <button type="button" class="icon-btn" data-close="suggestionsDialog">×</button>
+  </div>
+  <p>Have an idea, spotted a bug, or want a new cartography tool? Write it below.</p>
+  <form id="suggestionForm">
+    <label for="suggestionType">Category</label>
+    <select id="suggestionType" class="form-control">
+      <option>Feature idea</option>
+      <option>Bug report</option>
+      <option>Usability improvement</option>
+      <option>Other</option>
+    </select>
+    <label for="suggestionText">Your suggestion</label>
+    <textarea id="suggestionText" rows="5" maxlength="3000"
+              placeholder="I would love to see..." required></textarea>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close="suggestionsDialog">Cancel</button>
+      <button type="submit" class="btn btn-primary">Prepare suggestion</button>
+    </div>
+  </form>
+  <p class="suggestion-note">This prepares a message in your email app; it does not send anything automatically.</p>
+</dialog>
+
+<dialog id="aboutDialog" class="app-dialog about-dialog">
+  <div class="dialog-heading">
+    <div class="about-brand">
+      <span class="brand-mark large">✦</span>
+      <div>
+        <div class="eyebrow">THE HIDDEN VAULT OF REALITIES</div>
+        <h2>The Aethercrypt: Atlas</h2>
+      </div>
+    </div>
+    <button type="button" class="icon-btn" data-close="aboutDialog">×</button>
+  </div>
+  <p class="about-tagline">Worlds forgotten. Stories eternal.</p>
+  <p>A manual cartography studio for building worlds from a blank canvas. Draw continents by hand, design regions, organize maps into submaps, and export your creations.</p>
+  <div class="about-features">
+    <div><strong>01</strong><span>Draw your own geography</span></div>
+    <div><strong>02</strong><span>Link submaps to regions</span></div>
+    <div><strong>03</strong><span>Save and export your atlas</span></div>
+  </div>
+  <div class="about-version">ATLAS · EARLY DEVELOPMENT</div>
+  <div class="dialog-actions">
+    <button type="button" class="btn btn-primary" data-close="aboutDialog">Return to the Atlas</button>
+  </div>
+</dialog>
+
+<script src="script.js"></script>
+</body>
+</html>
