@@ -1,3 +1,4 @@
+
 "use strict";
 
 const $ = id => document.getElementById(id);
@@ -42,22 +43,10 @@ let toastTimer;
 function uid(prefix = "item") {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function currentMap() {
-  return state.maps.find(m => m.id === state.currentMapId);
-}
-
-function selectedObject() {
-  return state.objects.find(o => o.id === state.selectedId);
-}
+function clone(value) { return JSON.parse(JSON.stringify(value)); }
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function currentMap() { return state.maps.find(m => m.id === state.currentMapId); }
+function selectedObject() { return state.objects.find(o => o.id === state.selectedId); }
 
 function showToast(message) {
   $("toast").textContent = message;
@@ -74,7 +63,8 @@ function snapshot() {
     zoom: state.zoom,
     layers: clone(state.layers),
     activeLayerId: state.activeLayerId,
-    objects: clone(state.objects)
+    objects: clone(state.objects),
+    backgroundColor: state.backgroundColor || "#f2eadb"
   };
 }
 
@@ -83,16 +73,15 @@ function restore(data) {
   state.width = clamp(Number(data.width) || 2400, 200, 12000);
   state.height = clamp(Number(data.height) || 1600, 200, 12000);
   state.zoom = clamp(Number(data.zoom) || 1, MIN_ZOOM, MAX_ZOOM);
-
   state.layers = Array.isArray(data.layers) && data.layers.length
     ? clone(data.layers)
     : [{ id: uid("layer"), name: "Layer 1", visible: true }];
-
   state.activeLayerId = state.layers.some(l => l.id === data.activeLayerId)
-    ? data.activeLayerId
-    : state.layers[0].id;
-
+    ? data.activeLayerId : state.layers[0].id;
   state.objects = Array.isArray(data.objects) ? clone(data.objects) : [];
+  state.backgroundColor = data.backgroundColor || "#f2eadb";
+  $("canvasBackground").setAttribute("fill", state.backgroundColor);
+  if ($("backgroundColor")) $("backgroundColor").value = state.backgroundColor;
   state.selectedId = null;
   state.drawing = null;
   overlay.replaceChildren();
@@ -101,38 +90,30 @@ function restore(data) {
 
 function saveHistory() {
   const encoded = JSON.stringify(snapshot());
-
   if (state.history[state.historyIndex] === encoded) return;
-
   state.history = state.history.slice(0, state.historyIndex + 1);
   state.history.push(encoded);
-
   if (state.history.length > 100) state.history.shift();
-
   state.historyIndex = state.history.length - 1;
   updateHistoryButtons();
 }
 
 function undo() {
   if (state.historyIndex <= 0) return;
-
   state.historyIndex--;
   restore(JSON.parse(state.history[state.historyIndex]));
   updateHistoryButtons();
   storeCurrentMap();
   showToast("Undo");
 }
-
 function redo() {
   if (state.historyIndex >= state.history.length - 1) return;
-
   state.historyIndex++;
   restore(JSON.parse(state.history[state.historyIndex]));
   updateHistoryButtons();
   storeCurrentMap();
   showToast("Redo");
 }
-
 function updateHistoryButtons() {
   $("undoBtn").disabled = state.historyIndex <= 0;
   $("redoBtn").disabled = state.historyIndex >= state.history.length - 1;
@@ -148,17 +129,17 @@ const toolHelp = {
   eraser: "Click an object to erase it.",
   label: "Click the canvas to add a text label. Select it to resize, curve or move it.",
   bucket: "Click a land or water shape to recolor the whole region with the brush color.",
-  mountain: "Click anywhere to place a mountain stamp. Click again to add more."
+  mountain: "Click anywhere to place a mountain stamp. Click again to add more.",
+  lake: "Click to add lake points. Double-click or right-click to finish.",
+  compass: "Click anywhere to place a compass rose."
 };
 
 function setTool(tool) {
   state.tool = tool;
   canvas.dataset.tool = tool;
-
   document.querySelectorAll(".tool-btn").forEach(button => {
     button.classList.toggle("active", button.dataset.tool === tool);
   });
-
   $("toolHint").textContent = toolHelp[tool] || "";
   $("toolTip").textContent = toolHelp[tool] || "";
 }
@@ -172,7 +153,6 @@ function updateZoom() {
 function setZoom(value, anchorX = null, anchorY = null) {
   const oldZoom = state.zoom;
   const nextZoom = clamp(value, MIN_ZOOM, MAX_ZOOM);
-
   if (nextZoom === oldZoom) return;
 
   const viewportRect = viewport.getBoundingClientRect();
@@ -192,13 +172,11 @@ function setZoom(value, anchorX = null, anchorY = null) {
 function fitCanvas() {
   const availableWidth = Math.max(100, viewport.clientWidth - 60);
   const availableHeight = Math.max(100, viewport.clientHeight - 60);
-
   state.zoom = clamp(
     Math.min(availableWidth / state.width, availableHeight / state.height),
     MIN_ZOOM,
     1
   );
-
   updateZoom();
   viewport.scrollTo({ left: 0, top: 0, behavior: "smooth" });
 }
@@ -207,20 +185,16 @@ function updateCanvasDimensions() {
   canvas.setAttribute("width", state.width);
   canvas.setAttribute("height", state.height);
   canvas.setAttribute("viewBox", `0 0 ${state.width} ${state.height}`);
-
   $("canvasBackground").setAttribute("width", state.width);
   $("canvasBackground").setAttribute("height", state.height);
   $("canvasGrid").setAttribute("width", state.width);
   $("canvasGrid").setAttribute("height", state.height);
-
   $("canvasInfo").textContent = `${state.width} × ${state.height} px`;
   $("canvasWidth").value = state.width;
   $("canvasHeight").value = state.height;
-
   $("gridPattern").setAttribute("width", GRID);
   $("gridPattern").setAttribute("height", GRID);
   $("canvasGrid").setAttribute("visibility", state.showGrid ? "visible" : "hidden");
-
   updateZoom();
 }
 
@@ -244,22 +218,15 @@ function createSvgObject(obj) {
 
   if (obj.type === "land" || obj.type === "water" || obj.type === "freehand") {
     el = document.createElementNS(NS, "polygon");
-
-    el.setAttribute(
-      "points",
-      (obj.points || []).map(p => `${p.x},${p.y}`).join(" ")
-    );
-
+    el.setAttribute("points", (obj.points || []).map(p => `${p.x},${p.y}`).join(" "));
     el.setAttribute("fill", obj.color);
     el.setAttribute("fill-opacity", obj.type === "water" ? ".72" : ".88");
     el.setAttribute("stroke", obj.stroke || obj.color);
     el.setAttribute("stroke-width", obj.strokeWidth || 2);
     el.setAttribute("stroke-linejoin", "round");
     el.setAttribute("stroke-linecap", "round");
-
   } else if (obj.type === "line") {
     el = document.createElementNS(NS, "line");
-
     el.setAttribute("x1", obj.x1);
     el.setAttribute("y1", obj.y1);
     el.setAttribute("x2", obj.x2);
@@ -267,55 +234,40 @@ function createSvgObject(obj) {
     el.setAttribute("stroke", obj.color);
     el.setAttribute("stroke-width", obj.strokeWidth || 2);
     el.setAttribute("stroke-linecap", "round");
-
   } else if (obj.type === "label") {
     if (obj.curved) {
       el = document.createElementNS(NS, "g");
-
       const pathId = `curve-${obj.id}`;
       const defs = document.createElementNS(NS, "defs");
       const path = document.createElementNS(NS, "path");
-
-      const width = Math.max(
-        100,
-        (obj.text || "Label").length * (obj.fontSize || 28) * .62
-      );
-
+      const width = Math.max(100, (obj.text || "Label").length * (obj.fontSize || 28) * .62);
       path.setAttribute("id", pathId);
-      path.setAttribute(
-        "d",
-        `M ${obj.x - width / 2} ${obj.y} Q ${obj.x} ${obj.y - Math.max(25, width * .18)} ${obj.x + width / 2} ${obj.y}`
-      );
-
+      path.setAttribute("d", `M ${obj.x - width / 2} ${obj.y} Q ${obj.x} ${obj.y - Math.max(10, Number(obj.curveSize) || width * .18)} ${obj.x + width / 2} ${obj.y}`);
       defs.appendChild(path);
-
       const text = document.createElementNS(NS, "text");
       text.setAttribute("fill", obj.color);
-      text.setAttribute("font-family", "Georgia, serif");
+      text.setAttribute("font-family", obj.fontFamily || "Georgia, serif");
+      text.setAttribute("letter-spacing", obj.letterSpacing || 0);
       text.setAttribute("font-size", obj.fontSize || 28);
-
       const textPath = document.createElementNS(NS, "textPath");
       textPath.setAttribute("href", `#${pathId}`);
       textPath.setAttribute("startOffset", "50%");
       textPath.setAttribute("text-anchor", "middle");
       textPath.textContent = obj.text || "Label";
-
       text.appendChild(textPath);
       el.append(defs, text);
-
     } else {
       el = document.createElementNS(NS, "text");
       el.setAttribute("x", obj.x);
       el.setAttribute("y", obj.y);
       el.setAttribute("fill", obj.color);
-      el.setAttribute("font-family", "Georgia, serif");
+      el.setAttribute("font-family", obj.fontFamily || "Georgia, serif");
+      el.setAttribute("letter-spacing", obj.letterSpacing || 0);
       el.setAttribute("font-size", obj.fontSize || 28);
       el.textContent = obj.text || "Label";
     }
-
   } else if (obj.type === "mountain") {
     el = document.createElementNS(NS, "text");
-
     el.setAttribute("x", obj.x);
     el.setAttribute("y", obj.y);
     el.setAttribute("font-size", obj.size || 42);
@@ -331,7 +283,6 @@ function createSvgObject(obj) {
   if (el && obj.type !== "line") {
     el.setAttribute("stroke-linejoin", "round");
   }
-
   return el;
 }
 
@@ -343,20 +294,13 @@ function renderObjects() {
     group.setAttribute("visibility", layer.visible ? "visible" : "hidden");
     group.dataset.layerId = layer.id;
 
-    state.objects
-      .filter(o => o.layerId === layer.id)
-      .forEach(obj => {
-        const el = createSvgObject(obj);
-        if (!el) return;
-
-        el.dataset.objectId = obj.id;
-
-        if (obj.id === state.selectedId) {
-          el.classList.add("selected-object");
-        }
-
-        group.appendChild(el);
-      });
+    state.objects.filter(o => o.layerId === layer.id).forEach(obj => {
+      const el = createSvgObject(obj);
+      if (!el) return;
+      el.dataset.objectId = obj.id;
+      if (obj.id === state.selectedId) el.classList.add("selected-object");
+      group.appendChild(el);
+    });
 
     objectGroup.appendChild(group);
   }
@@ -376,7 +320,6 @@ function renderLayers() {
     visible.className = "layer-visibility";
     visible.textContent = layer.visible ? "◉" : "○";
     visible.title = "Toggle layer visibility";
-
     visible.addEventListener("click", () => {
       layer.visible = !layer.visible;
       renderAll();
@@ -388,7 +331,6 @@ function renderLayers() {
     select.type = "button";
     select.className = "layer-select";
     select.textContent = layer.name;
-
     select.addEventListener("click", () => {
       state.activeLayerId = layer.id;
       renderLayers();
@@ -401,28 +343,28 @@ function renderLayers() {
 
 function renderProperties() {
   const obj = selectedObject();
-
   $("selectionMessage").hidden = Boolean(obj);
   $("objectProperties").hidden = !obj;
 
   if (!obj) return;
 
   $("objectName").value = obj.name || obj.text || "";
-
   $("objectColor").value = /^#[0-9a-f]{6}$/i.test(obj.color || "")
-    ? obj.color
-    : "#a1b18a";
-
+    ? obj.color : "#a1b18a";
   $("textProperties").hidden = obj.type !== "label";
-
   if (obj.type === "label") {
     $("textSize").value = obj.fontSize || 28;
     $("textSizeLabel").textContent = obj.fontSize || 28;
     $("textCurved").checked = Boolean(obj.curved);
+    $("textFont").value = obj.fontFamily || "Georgia, serif";
+    $("textSpacing").value = obj.letterSpacing || 0;
+    $("textSpacingLabel").textContent = obj.letterSpacing || 0;
+    $("curveSize").value = obj.curveSize || 70;
+    $("curveSizeLabel").textContent = obj.curveSize || 70;
+    $("curveOptions").hidden = !obj.curved;
   }
 
-  const canLink = ["land", "water", "freehand"].includes(obj.type);
-
+  const canLink = ["land", "water", "lake", "freehand"].includes(obj.type);
   $("createRegionSubmapBtn").hidden = !canLink || Boolean(obj.linkedMapId);
   $("openRegionSubmapBtn").hidden = !obj.linkedMapId;
 }
@@ -431,10 +373,8 @@ function addObject(obj) {
   obj.id = uid("object");
   obj.layerId = state.activeLayerId;
   obj.name = obj.name || "";
-
   state.objects.push(obj);
   state.selectedId = obj.id;
-
   renderAll();
   saveHistory();
   storeCurrentMap();
@@ -442,7 +382,6 @@ function addObject(obj) {
 
 function pointFromEvent(event) {
   const rect = canvas.getBoundingClientRect();
-
   let x = (event.clientX - rect.left) * state.width / rect.width;
   let y = (event.clientY - rect.top) * state.height / rect.height;
 
@@ -451,46 +390,31 @@ function pointFromEvent(event) {
     y = Math.round(y / GRID) * GRID;
   }
 
-  return {
-    x: clamp(x, 0, state.width),
-    y: clamp(y, 0, state.height)
-  };
+  return { x: clamp(x, 0, state.width), y: clamp(y, 0, state.height) };
 }
 
 function drawPreview(point = null) {
   overlay.replaceChildren();
-
   if (!state.drawing) return;
 
   const d = state.drawing;
   const points = [...d.points];
-
   if (point) points.push(point);
 
-  if (["land", "water", "freehand"].includes(d.type)) {
+  if (["land", "water", "freehand", "lake"].includes(d.type)) {
     const el = document.createElementNS(NS, "polygon");
-
-    el.setAttribute(
-      "points",
-      points.map(p => `${p.x},${p.y}`).join(" ")
-    );
-
-    const previewColor = d.type === "water" ? "#78a9c9" : state.brushColor;
-
+    el.setAttribute("points", points.map(p => `${p.x},${p.y}`).join(" "));
+    const previewColor = d.type === "water" ? "#78a9c9" : d.type === "lake" ? "#65a9a0" : state.brushColor;
     el.setAttribute("fill", previewColor);
     el.setAttribute("fill-opacity", ".3");
     el.setAttribute("stroke", previewColor);
     el.setAttribute("stroke-width", Math.max(1, state.brushSize / 2));
     el.setAttribute("stroke-dasharray", "5 4");
-
     overlay.appendChild(el);
-
   } else if (d.type === "line") {
     const start = d.points[0];
     const end = point || start;
-
     const el = document.createElementNS(NS, "line");
-
     el.setAttribute("x1", start.x);
     el.setAttribute("y1", start.y);
     el.setAttribute("x2", end.x);
@@ -498,16 +422,13 @@ function drawPreview(point = null) {
     el.setAttribute("stroke", state.brushColor);
     el.setAttribute("stroke-width", state.brushSize);
     el.setAttribute("stroke-dasharray", "5 4");
-
     overlay.appendChild(el);
   }
 }
 
 function finishPolygon() {
   const d = state.drawing;
-
-  if (!d || !["land", "water", "freehand"].includes(d.type)) return;
-
+  if (!d || !["land", "water", "freehand", "lake"].includes(d.type)) return;
   state.drawing = null;
   overlay.replaceChildren();
 
@@ -519,9 +440,10 @@ function finishPolygon() {
   addObject({
     type: d.type,
     points: d.points,
-    color: d.type === "water" ? "#78a9c9" : state.brushColor,
-    stroke: d.type === "water" ? "#477d9f" : state.brushColor,
-    strokeWidth: Math.max(1, state.brushSize / 2)
+    color: d.type === "water" ? "#78a9c9" : d.type === "lake" ? "#65a9a0" : state.brushColor,
+    stroke: d.type === "water" ? "#477d9f" : d.type === "lake" ? "#397d77" : state.brushColor,
+    strokeWidth: Math.max(1, state.brushSize / 2),
+    waveDirection: "horizontal"
   });
 }
 
@@ -545,18 +467,15 @@ function handleCanvasClick(event) {
     if (hitId) {
       state.objects = state.objects.filter(o => o.id !== hitId);
       state.selectedId = null;
-
       renderAll();
       saveHistory();
       storeCurrentMap();
     }
-
     return;
   }
 
   if (state.tool === "label") {
     const text = prompt("Enter your map label:", "New Location");
-
     if (text === null || !text.trim()) return;
 
     addObject({
@@ -565,48 +484,35 @@ function handleCanvasClick(event) {
       x: point.x,
       y: point.y,
       color: state.brushColor,
-      fontSize: Math.max(12, state.brushSize * 4)
+      fontSize: Math.max(12, state.brushSize * 4),
+      fontFamily: "Georgia, serif",
+      letterSpacing: 0,
+      curveSize: 70
     });
-
     return;
   }
 
   if (state.tool === "bucket") {
     const obj = state.objects.find(item => item.id === hitId);
-
     if (obj && ["land", "water", "freehand"].includes(obj.type)) {
       obj.color = state.brushColor;
       obj.stroke = state.brushColor;
-
-      renderAll();
-      saveHistory();
-      storeCurrentMap();
-    } else {
-      showToast("Select a land or water region to fill it.");
-    }
-
+      renderAll(); saveHistory(); storeCurrentMap();
+    } else { showToast("Select a land or water region to fill it."); }
     return;
   }
 
   if (state.tool === "mountain") {
-    addObject({
-      type: "mountain",
-      x: point.x,
-      y: point.y,
-      color: state.brushColor,
-      size: Math.max(24, state.brushSize * 7)
-    });
-
+    addObject({ type: "mountain", x: point.x, y: point.y, color: state.brushColor, size: Math.max(24, state.brushSize * 7) });
     return;
   }
 
-  if (["land", "water"].includes(state.tool)) {
+  if (["land", "water", "lake"].includes(state.tool)) {
     if (!state.drawing || state.drawing.type !== state.tool) {
       state.drawing = { type: state.tool, points: [point] };
     } else {
       state.drawing.points.push(point);
     }
-
     drawPreview();
     return;
   }
@@ -617,16 +523,12 @@ function handleCanvasClick(event) {
       drawPreview(point);
     } else {
       const start = state.drawing.points[0];
-
       state.drawing = null;
       overlay.replaceChildren();
-
       addObject({
         type: "line",
-        x1: start.x,
-        y1: start.y,
-        x2: point.x,
-        y2: point.y,
+        x1: start.x, y1: start.y,
+        x2: point.x, y2: point.y,
         color: state.brushColor,
         strokeWidth: state.brushSize
       });
@@ -637,7 +539,6 @@ function handleCanvasClick(event) {
 canvas.addEventListener("pointerdown", event => {
   if (state.tool === "pan" || event.button === 1) {
     event.preventDefault();
-
     state.panning = {
       x: event.clientX,
       y: event.clientY,
@@ -645,28 +546,16 @@ canvas.addEventListener("pointerdown", event => {
       top: viewport.scrollTop,
       moved: false
     };
-
     canvas.setPointerCapture(event.pointerId);
     return;
   }
 
   if (state.tool === "select" && event.button === 0) {
     const hit = event.target.closest?.("[data-object-id]");
-
-    const obj = hit
-      ? state.objects.find(item => item.id === hit.dataset.objectId)
-      : null;
-
+    const obj = hit ? state.objects.find(item => item.id === hit.dataset.objectId) : null;
     if (obj) {
       state.selectedId = obj.id;
-
-      state.draggingObject = {
-        id: obj.id,
-        start: pointFromEvent(event),
-        original: clone(obj),
-        moved: false
-      };
-
+      state.draggingObject = { id: obj.id, start: pointFromEvent(event), original: clone(obj), moved: false };
       canvas.setPointerCapture(event.pointerId);
       renderAll();
       return;
@@ -675,13 +564,11 @@ canvas.addEventListener("pointerdown", event => {
 
   if (state.tool === "freehand" && event.button === 0) {
     event.preventDefault();
-
     state.drawing = {
       type: "freehand",
       points: [pointFromEvent(event)],
       pointerId: event.pointerId
     };
-
     canvas.setPointerCapture(event.pointerId);
     drawPreview();
   }
@@ -691,11 +578,7 @@ canvas.addEventListener("pointermove", event => {
   if (state.panning) {
     const dx = event.clientX - state.panning.x;
     const dy = event.clientY - state.panning.y;
-
-    if (Math.abs(dx) + Math.abs(dy) > 3) {
-      state.panning.moved = true;
-    }
-
+    if (Math.abs(dx) + Math.abs(dy) > 3) state.panning.moved = true;
     viewport.scrollLeft = state.panning.left - dx;
     viewport.scrollTop = state.panning.top - dy;
     return;
@@ -705,33 +588,15 @@ canvas.addEventListener("pointermove", event => {
     const p = pointFromEvent(event);
     const dx = p.x - state.draggingObject.start.x;
     const dy = p.y - state.draggingObject.start.y;
-
-    if (Math.abs(dx) + Math.abs(dy) > 1) {
-      state.draggingObject.moved = true;
-    }
-
+    if (Math.abs(dx) + Math.abs(dy) > 1) state.draggingObject.moved = true;
     const obj = state.objects.find(item => item.id === state.draggingObject.id);
     const original = state.draggingObject.original;
-
     if (obj) {
-      if (obj.points) {
-        obj.points = original.points.map(pt => ({
-          x: pt.x + dx,
-          y: pt.y + dy
-        }));
-      } else if (obj.type === "line") {
-        obj.x1 = original.x1 + dx;
-        obj.y1 = original.y1 + dy;
-        obj.x2 = original.x2 + dx;
-        obj.y2 = original.y2 + dy;
-      } else {
-        obj.x = original.x + dx;
-        obj.y = original.y + dy;
-      }
-
+      if (obj.points) obj.points = original.points.map(pt => ({ x: pt.x + dx, y: pt.y + dy }));
+      else if (obj.type === "line") { obj.x1 = original.x1 + dx; obj.y1 = original.y1 + dy; obj.x2 = original.x2 + dx; obj.y2 = original.y2 + dy; }
+      else { obj.x = original.x + dx; obj.y = original.y + dy; }
       renderObjects();
     }
-
     return;
   }
 
@@ -745,39 +610,27 @@ canvas.addEventListener("pointermove", event => {
       points.push(p);
       drawPreview();
     }
-
     return;
   }
 
-  if (state.drawing) {
-    drawPreview(pointFromEvent(event));
-  }
+  if (state.drawing) drawPreview(pointFromEvent(event));
 });
 
 function endPointer() {
   if (state.draggingObject) {
     const moved = state.draggingObject.moved;
     state.draggingObject = null;
-
-    if (moved) {
-      renderAll();
-      saveHistory();
-      storeCurrentMap();
-    }
-
+    if (moved) { renderAll(); saveHistory(); storeCurrentMap(); }
     state.suppressClick = true;
     return;
   }
-
   if (state.panning) {
     state.suppressClick = state.panning.moved;
     state.panning = null;
     return;
   }
 
-  if (state.drawing?.type === "freehand") {
-    finishPolygon();
-  }
+  if (state.drawing?.type === "freehand") finishPolygon();
 }
 
 canvas.addEventListener("pointerup", endPointer);
@@ -789,14 +642,14 @@ canvas.addEventListener("click", event => {
 });
 
 canvas.addEventListener("dblclick", event => {
-  if (["land", "water"].includes(state.tool)) {
+  if (["land", "water", "lake"].includes(state.tool)) {
     event.preventDefault();
     finishPolygon();
   }
 });
 
 canvas.addEventListener("contextmenu", event => {
-  if (state.drawing && ["land", "water"].includes(state.drawing.type)) {
+  if (state.drawing && ["land", "water", "lake"].includes(state.drawing.type)) {
     event.preventDefault();
     finishPolygon();
   }
@@ -830,11 +683,9 @@ $("fitBtn").addEventListener("click", fitCanvas);
 
 viewport.addEventListener("wheel", event => {
   if (!event.ctrlKey && !event.metaKey) return;
-
   event.preventDefault();
 
   const rect = viewport.getBoundingClientRect();
-
   setZoom(
     state.zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1),
     event.clientX - rect.left,
@@ -847,18 +698,10 @@ $("redoBtn").addEventListener("click", redo);
 
 $("addLayerBtn").addEventListener("click", () => {
   const name = prompt("Name your new layer:", `Layer ${state.layers.length + 1}`);
-
   if (!name?.trim()) return;
-
-  const layer = {
-    id: uid("layer"),
-    name: name.trim(),
-    visible: true
-  };
-
+  const layer = { id: uid("layer"), name: name.trim(), visible: true };
   state.layers.push(layer);
   state.activeLayerId = layer.id;
-
   renderAll();
   saveHistory();
   storeCurrentMap();
@@ -869,11 +712,7 @@ $("objectName").addEventListener("change", event => {
   if (!obj) return;
 
   const name = event.target.value.trim();
-
-  if (obj.type === "label") {
-    obj.text = name || "Label";
-  }
-
+  if (obj.type === "label") obj.text = name || "Label";
   obj.name = name;
 
   renderAll();
@@ -884,13 +723,8 @@ $("objectName").addEventListener("change", event => {
 $("objectColor").addEventListener("input", event => {
   const obj = selectedObject();
   if (!obj) return;
-
   obj.color = event.target.value;
-
-  if (["land", "water", "freehand"].includes(obj.type)) {
-    obj.stroke = obj.color;
-  }
-
+  if (["land", "water", "freehand"].includes(obj.type)) obj.stroke = obj.color;
   renderObjects();
 });
 
@@ -900,61 +734,29 @@ $("objectColor").addEventListener("change", () => {
 });
 
 $("textSize").addEventListener("input", event => {
-  const obj = selectedObject();
-
-  if (!obj || obj.type !== "label") return;
-
+  const obj = selectedObject(); if (!obj || obj.type !== "label") return;
   obj.fontSize = Number(event.target.value);
-  $("textSizeLabel").textContent = obj.fontSize;
-
-  renderObjects();
+  $("textSizeLabel").textContent = obj.fontSize; renderObjects();
 });
-
-$("textSize").addEventListener("change", () => {
-  saveHistory();
-  storeCurrentMap();
-});
-
+$("textSize").addEventListener("change", () => { saveHistory(); storeCurrentMap(); });
 $("textCurved").addEventListener("change", event => {
-  const obj = selectedObject();
-
-  if (!obj || obj.type !== "label") return;
-
-  obj.curved = event.target.checked;
-
-  renderAll();
-  saveHistory();
-  storeCurrentMap();
+  const obj = selectedObject(); if (!obj || obj.type !== "label") return;
+  obj.curved = event.target.checked; renderAll(); saveHistory(); storeCurrentMap();
 });
 
 $("renameProjectBtn").addEventListener("click", () => {
   const name = prompt("Rename this map:", state.projectName);
-
   if (!name || !name.trim()) return;
-
   state.projectName = name.trim().slice(0, 80);
-
-  const map = currentMap();
-
-  if (map) {
-    map.name = state.projectName;
-  }
-
-  updateProjectName();
-  updateBreadcrumbs();
-  renderSubmaps();
-  saveHistory();
-  storeCurrentMap();
-
-  showToast("Map renamed.");
+  const map = currentMap(); if (map) map.name = state.projectName;
+  updateProjectName(); updateBreadcrumbs(); renderSubmaps();
+  saveHistory(); storeCurrentMap(); showToast("Map renamed.");
 });
 
 $("deleteObjectBtn").addEventListener("click", () => {
   if (!state.selectedId) return;
-
   state.objects = state.objects.filter(o => o.id !== state.selectedId);
   state.selectedId = null;
-
   renderAll();
   saveHistory();
   storeCurrentMap();
@@ -972,26 +774,19 @@ function captureCurrentMap() {
 function storeCurrentMap() {
   const data = captureCurrentMap();
   const index = state.maps.findIndex(m => m.id === data.id);
-
-  if (index < 0) {
-    state.maps.push(data);
-  } else {
-    state.maps[index] = data;
-  }
+  if (index < 0) state.maps.push(data);
+  else state.maps[index] = data;
 }
 
 function ancestry(mapId) {
   const chain = [];
   const visited = new Set();
-
   let map = state.maps.find(m => m.id === mapId);
 
   while (map && !visited.has(map.id)) {
     visited.add(map.id);
     chain.unshift(map);
-    map = map.parentId
-      ? state.maps.find(m => m.id === map.parentId)
-      : null;
+    map = map.parentId ? state.maps.find(m => m.id === map.parentId) : null;
   }
 
   return chain;
@@ -1014,28 +809,23 @@ function updateBreadcrumbs() {
     button.classList.toggle("current", map.id === state.currentMapId);
     button.textContent = map.name;
     button.addEventListener("click", () => switchMap(map.id));
-
     container.appendChild(button);
   });
 }
 
 function switchMap(id) {
   storeCurrentMap();
-
   const target = state.maps.find(m => m.id === id);
   if (!target) return;
 
   state.currentMapId = target.id;
   state.parentMapId = target.parentId || null;
-
   restore(clone(target.data));
 
   state.history = [];
   state.historyIndex = -1;
-
   saveHistory();
   renderAll();
-
   showToast(`Opened ${target.name}`);
 }
 
@@ -1044,11 +834,7 @@ function createSubmap(name, linkedObjectId = null) {
 
   const parent = state.currentMapId;
   const id = uid("map");
-  const layer = {
-    id: uid("layer"),
-    name: "Layer 1",
-    visible: true
-  };
+  const layer = { id: uid("layer"), name: "Layer 1", visible: true };
 
   state.maps.push({
     id,
@@ -1068,11 +854,7 @@ function createSubmap(name, linkedObjectId = null) {
 
   if (linkedObjectId) {
     const region = state.objects.find(o => o.id === linkedObjectId);
-
-    if (region) {
-      region.linkedMapId = id;
-    }
-
+    if (region) region.linkedMapId = id;
     storeCurrentMap();
   }
 
@@ -1081,17 +863,10 @@ function createSubmap(name, linkedObjectId = null) {
 
 $("createRegionSubmapBtn").addEventListener("click", () => {
   const region = selectedObject();
-
-  if (!region || !["land", "water", "freehand"].includes(region.type)) {
-    return;
-  }
+  if (!region || !["land", "water", "lake", "freehand"].includes(region.type)) return;
 
   const defaultName = region.name || "New Region";
-  const name = prompt(
-    "Name this region's submap:",
-    `${defaultName} — Detailed Map`
-  );
-
+  const name = prompt("Name this region's submap:", `${defaultName} — Detailed Map`);
   if (!name?.trim()) return;
 
   createSubmap(name.trim(), region.id);
@@ -1099,10 +874,7 @@ $("createRegionSubmapBtn").addEventListener("click", () => {
 
 $("openRegionSubmapBtn").addEventListener("click", () => {
   const region = selectedObject();
-
-  if (region?.linkedMapId) {
-    switchMap(region.linkedMapId);
-  }
+  if (region?.linkedMapId) switchMap(region.linkedMapId);
 });
 
 function renderSubmaps() {
@@ -1131,9 +903,7 @@ function renderSubmaps() {
 
     const meta = document.createElement("div");
     meta.className = "submap-entry-meta";
-
     const parent = state.maps.find(m => m.id === map.parentId);
-
     meta.textContent = map.id === "main"
       ? "Main map"
       : `Submap · ${parent?.name || "Unknown parent"}`;
@@ -1144,7 +914,6 @@ function renderSubmaps() {
     open.type = "button";
     open.textContent = map.id === state.currentMapId ? "Here" : "Open";
     open.disabled = map.id === state.currentMapId;
-
     open.addEventListener("click", () => {
       switchMap(map.id);
       $("submapDialog").close();
@@ -1154,13 +923,10 @@ function renderSubmaps() {
 
     if (map.id !== "main") {
       const remove = document.createElement("button");
-
       remove.type = "button";
       remove.textContent = "×";
       remove.title = "Delete submap and descendants";
-
       remove.addEventListener("click", () => deleteSubmap(map.id));
-
       entry.appendChild(remove);
     }
 
@@ -1174,7 +940,6 @@ function descendants(id) {
 
   while (changed) {
     changed = false;
-
     state.maps.forEach(map => {
       if (map.parentId && ids.has(map.parentId) && !ids.has(map.id)) {
         ids.add(map.id);
@@ -1188,38 +953,27 @@ function descendants(id) {
 
 function deleteSubmap(id) {
   if (id === "main") return;
-
   const map = state.maps.find(m => m.id === id);
-
-  if (!map || !confirm(`Delete "${map.name}" and all of its submaps?`)) {
-    return;
-  }
+  if (!map || !confirm(`Delete "${map.name}" and all of its submaps?`)) return;
 
   storeCurrentMap();
 
   const parentId = map.parentId || "main";
   const removing = descendants(id);
-
   state.maps = state.maps.filter(m => !removing.has(m.id));
 
+  // Remove broken region links after deleting their maps.
   state.maps.forEach(m => {
     m.data.objects.forEach(obj => {
-      if (obj.linkedMapId && removing.has(obj.linkedMapId)) {
-        delete obj.linkedMapId;
-      }
+      if (obj.linkedMapId && removing.has(obj.linkedMapId)) delete obj.linkedMapId;
     });
   });
 
   if (removing.has(state.currentMapId)) {
     state.currentMapId = parentId;
-
     const parent = state.maps.find(m => m.id === parentId) || state.maps[0];
-
     state.parentMapId = parent?.parentId || null;
-
-    if (parent) {
-      restore(clone(parent.data));
-    }
+    if (parent) restore(clone(parent.data));
   }
 
   storeCurrentMap();
@@ -1235,13 +989,9 @@ $("submapsBtn").addEventListener("click", () => {
 
 $("createSubmapForm").addEventListener("submit", event => {
   event.preventDefault();
-
   const name = $("submapName").value.trim();
-
   if (!name) return;
-
   createSubmap(name);
-
   $("submapName").value = "";
   $("submapDialog").close();
 });
@@ -1258,43 +1008,29 @@ $("canvasSizeForm").addEventListener("submit", event => {
   const width = Number($("canvasWidth").value);
   const height = Number($("canvasHeight").value);
 
-  if (
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width < 200 ||
-    width > 12000 ||
-    height < 200 ||
-    height > 12000
-  ) {
+  if (!Number.isFinite(width) || !Number.isFinite(height) ||
+      width < 200 || width > 12000 || height < 200 || height > 12000) {
     showToast("Dimensions must be between 200 and 12000 px.");
     return;
   }
 
   saveHistory();
-
   state.width = Math.round(width);
   state.height = Math.round(height);
-
   updateCanvasDimensions();
   storeCurrentMap();
   saveHistory();
-
   $("canvasSizeDialog").close();
-
   showToast(`Canvas resized to ${state.width} × ${state.height}.`);
 });
 
 function safeFilename(name) {
-  return (name || "atlas")
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
-    .trim()
-    .replace(/\s+/g, "-")
-    .slice(0, 100) || "atlas";
+  return (name || "atlas").replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+    .trim().replace(/\s+/g, "-").slice(0, 100) || "atlas";
 }
 
 function makeProjectFile() {
   storeCurrentMap();
-
   return {
     format: "aethercrypt-atlas",
     version: 3,
@@ -1304,20 +1040,15 @@ function makeProjectFile() {
 }
 
 $("saveBtn").addEventListener("click", () => {
-  const blob = new Blob(
-    [JSON.stringify(makeProjectFile(), null, 2)],
-    { type: "application/json" }
-  );
-
+  const blob = new Blob([JSON.stringify(makeProjectFile(), null, 2)], {
+    type: "application/json"
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-
   a.href = url;
   a.download = `${safeFilename(state.projectName)}.atlas.json`;
   a.click();
-
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-
   showToast("Atlas saved.");
 });
 
@@ -1325,84 +1056,57 @@ $("openBtn").addEventListener("click", () => $("fileInput").click());
 
 $("fileInput").addEventListener("change", async event => {
   const file = event.target.files?.[0];
-
   if (!file) return;
 
   try {
     const data = JSON.parse(await file.text());
 
     if (data.format === "aethercrypt-atlas" && Array.isArray(data.maps)) {
-      const maps = data.maps.filter(
-        m => m && typeof m.id === "string" && m.data
-      );
-
-      if (!maps.some(m => m.id === "main")) {
-        throw new Error("Missing main map");
-      }
+      const maps = data.maps.filter(m => m && typeof m.id === "string" && m.data);
+      if (!maps.some(m => m.id === "main")) throw new Error("Missing main map");
 
       state.maps = clone(maps);
-
       state.currentMapId = maps.some(m => m.id === data.currentMapId)
-        ? data.currentMapId
-        : "main";
+        ? data.currentMapId : "main";
 
       const target = state.maps.find(m => m.id === state.currentMapId);
-
       state.parentMapId = target.parentId || null;
-
       restore(clone(target.data));
-
     } else {
       const mapData = data.data || data;
-
       state.maps = [{
         id: "main",
         parentId: null,
         name: mapData.projectName || "Untitled World",
         data: mapData
       }];
-
       state.currentMapId = "main";
       state.parentMapId = null;
-
       restore(clone(mapData));
     }
 
     storeCurrentMap();
-
     state.history = [];
     state.historyIndex = -1;
-
     saveHistory();
     renderAll();
-
     showToast("Project opened successfully.");
-
   } catch (error) {
     console.error(error);
     alert("Could not open this project. Please select a valid Atlas JSON file.");
-
   } finally {
     event.target.value = "";
   }
 });
 
 $("newBtn").addEventListener("click", () => {
-  if (!confirm("Create a new atlas? Save your current project first if needed.")) {
-    return;
-  }
+  if (!confirm("Create a new atlas? Save your current project first if needed.")) return;
 
   state.projectName = "Untitled World";
   state.width = 2400;
   state.height = 1600;
   state.zoom = 1;
-
-  state.layers = [{
-    id: uid("layer"),
-    name: "Layer 1",
-    visible: true
-  }];
-
+  state.layers = [{ id: uid("layer"), name: "Layer 1", visible: true }];
   state.activeLayerId = state.layers[0].id;
   state.objects = [];
   state.selectedId = null;
@@ -1416,46 +1120,34 @@ $("newBtn").addEventListener("click", () => {
   storeCurrentMap();
   renderAll();
   saveHistory();
-
   setTool("select");
   fitCanvas();
-
   showToast("New atlas created.");
 });
 
 $("exportBtn").addEventListener("click", () => {
   const svg = canvas.cloneNode(true);
-
   svg.setAttribute("xmlns", NS);
   svg.setAttribute("width", state.width);
   svg.setAttribute("height", state.height);
   svg.setAttribute("viewBox", `0 0 ${state.width} ${state.height}`);
 
   const source = new XMLSerializer().serializeToString(svg);
-
-  const blob = new Blob(
-    [source],
-    { type: "image/svg+xml;charset=utf-8" }
-  );
-
+  const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const image = new Image();
 
   image.onload = () => {
     const output = document.createElement("canvas");
-
     output.width = state.width;
     output.height = state.height;
-
     const ctx = output.getContext("2d");
-
     ctx.fillStyle = "#f2eadb";
     ctx.fillRect(0, 0, output.width, output.height);
     ctx.drawImage(image, 0, 0);
 
     output.toBlob(png => {
       URL.revokeObjectURL(url);
-
       if (!png) {
         showToast("PNG export failed.");
         return;
@@ -1463,15 +1155,11 @@ $("exportBtn").addEventListener("click", () => {
 
       const pngUrl = URL.createObjectURL(png);
       const a = document.createElement("a");
-
       a.href = pngUrl;
       a.download = `${safeFilename(state.projectName)}.png`;
       a.click();
-
       setTimeout(() => URL.revokeObjectURL(pngUrl), 1000);
-
       showToast("Map exported as PNG.");
-
     }, "image/png");
   };
 
@@ -1483,79 +1171,53 @@ $("exportBtn").addEventListener("click", () => {
   image.src = url;
 });
 
-$("suggestionsBtn").addEventListener("click", () => {
-  $("suggestionsDialog").showModal();
-});
-
+$("suggestionsBtn").addEventListener("click", () => $("suggestionsDialog").showModal());
 $("suggestionForm").addEventListener("submit", event => {
   event.preventDefault();
-
   const category = $("suggestionType").value;
   const message = $("suggestionText").value.trim();
-
   if (!message) return;
-
   const subject = encodeURIComponent(`[Atlas suggestion] ${category}`);
-  const body = encodeURIComponent(
-    `${message}\n\n— The Aethercrypt: Atlas`
-  );
-
+  const body = encodeURIComponent(`${message}\n\n— The Aethercrypt: Atlas`);
   window.location.href = `mailto:?subject=${subject}&body=${body}`;
-
   $("suggestionsDialog").close();
-
   showToast("Your email app should open with the suggestion prepared.");
 });
 
-$("aboutBtn").addEventListener("click", () => {
-  $("aboutDialog").showModal();
-});
+$("aboutBtn").addEventListener("click", () => $("aboutDialog").showModal());
 
 document.querySelectorAll("[data-close]").forEach(button => {
   button.addEventListener("click", () => {
     const dialog = $(button.dataset.close);
-
-    if (dialog?.open) {
-      dialog.close();
-    }
+    if (dialog?.open) dialog.close();
   });
 });
 
 document.querySelectorAll("dialog").forEach(dialog => {
   dialog.addEventListener("click", event => {
-    if (event.target === dialog) {
-      dialog.close();
-    }
+    if (event.target === dialog) dialog.close();
   });
 });
 
 document.addEventListener("keydown", event => {
   const target = event.target;
-
   const typing = target instanceof HTMLElement &&
-    (
-      target.isContentEditable ||
-      ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
-    );
+    (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
   if (typing) return;
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
     $("saveBtn").click();
-
   } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
     event.preventDefault();
     $("fileInput").click();
-
   } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
     undo();
-
   } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
     event.preventDefault();
     redo();
-
   } else if (event.key === "Escape" && state.drawing) {
     state.drawing = null;
     overlay.replaceChildren();
@@ -1568,3 +1230,547 @@ saveHistory();
 setTool("select");
 fitCanvas();
 updateHistoryButtons();
+
+/* =========================================================
+   THE AETHERCRYPT: ATLAS — INTEGRATED FEATURE EXPANSION
+   These features are part of script.js; no extra JS file.
+========================================================= */
+
+state.backgroundColor = state.backgroundColor || "#f2eadb";
+
+// Layer rename controls. Visibility toggles already exist in renderLayers().
+const baseRenderLayers = renderLayers;
+renderLayers = function () {
+  baseRenderLayers();
+  document.querySelectorAll(".layer-row").forEach((row, index) => {
+    const layer = state.layers[index];
+    if (!layer || row.querySelector(".layer-rename")) return;
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "layer-rename";
+    rename.textContent = "✎";
+    rename.title = "Rename layer";
+    rename.addEventListener("click", event => {
+      event.stopPropagation();
+      const nextName = prompt("Rename this layer:", layer.name);
+      if (!nextName || !nextName.trim()) return;
+      layer.name = nextName.trim().slice(0, 60);
+      renderLayers();
+      saveHistory();
+      storeCurrentMap();
+      showToast("Layer renamed.");
+    });
+    row.appendChild(rename);
+  });
+};
+
+// Draw decorative wave patterns clipped to the water polygon.
+const baseCreateSvgObject = createSvgObject;
+createSvgObject = function (obj) {
+  if (obj.type === "water") {
+    const group = document.createElementNS(NS, "g");
+    const base = baseCreateSvgObject(obj);
+    group.appendChild(base);
+
+    const points = obj.points || [];
+    if (points.length >= 3) {
+      const clipId = `water-clip-${obj.id}`;
+      const defs = document.createElementNS(NS, "defs");
+      const clip = document.createElementNS(NS, "clipPath");
+      clip.setAttribute("id", clipId);
+      const shape = document.createElementNS(NS, "polygon");
+      shape.setAttribute("points", points.map(p => `${p.x},${p.y}`).join(" "));
+      clip.appendChild(shape);
+      defs.appendChild(clip);
+      group.appendChild(defs);
+
+      const xs = points.map(p => p.x), ys = points.map(p => p.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const vertical = obj.waveDirection === "vertical";
+      const start = vertical ? minX - 100 : minY - 100;
+      const end = vertical ? maxX + 100 : maxY + 100;
+
+      for (let offset = start; offset <= end; offset += 65) {
+        const wave = document.createElementNS(NS, "path");
+        const d = vertical
+          ? `M ${offset} ${minY - 100} q -18 22 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44 t 0 44`
+          : `M ${minX - 100} ${offset} q 22 -18 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0 t 44 0`;
+        wave.setAttribute("d", d);
+        wave.setAttribute("class", "water-wave");
+        wave.setAttribute("clip-path", `url(#${clipId})`);
+        group.appendChild(wave);
+      }
+    }
+    return group;
+  }
+
+  if (obj.type === "lake") {
+    const group = document.createElementNS(NS, "g");
+    group.appendChild(baseCreateSvgObject({ ...obj, type: "water" }));
+    const points = obj.points || [];
+    if (points.length >= 3) {
+      const cx = points.reduce((sum, p) => sum + p.x, 0) / points.length;
+      const cy = points.reduce((sum, p) => sum + p.y, 0) / points.length;
+      [0, 1, 2].forEach(i => {
+        const ellipse = document.createElementNS(NS, "ellipse");
+        ellipse.setAttribute("cx", cx);
+        ellipse.setAttribute("cy", cy);
+        ellipse.setAttribute("rx", 22 + i * 18);
+        ellipse.setAttribute("ry", 10 + i * 8);
+        ellipse.setAttribute("class", "lake-detail");
+        group.appendChild(ellipse);
+      });
+    }
+    return group;
+  }
+
+  if (obj.type === "compass") {
+    const group = document.createElementNS(NS, "g");
+    group.setAttribute("class", "compass-rose");
+    const circle = document.createElementNS(NS, "circle");
+    circle.setAttribute("cx", obj.x); circle.setAttribute("cy", obj.y);
+    circle.setAttribute("r", 48); circle.setAttribute("fill", "#f2eadb");
+    circle.setAttribute("fill-opacity", ".9"); circle.setAttribute("stroke", "#4b354f");
+    circle.setAttribute("stroke-width", "3");
+    const star = document.createElementNS(NS, "path");
+    star.setAttribute("d", `M ${obj.x} ${obj.y-39} L ${obj.x+10} ${obj.y} L ${obj.x} ${obj.y+39} L ${obj.x-10} ${obj.y} Z M ${obj.x-39} ${obj.y} L ${obj.x} ${obj.y-10} L ${obj.x+39} ${obj.y} L ${obj.x} ${obj.y+10} Z`);
+    star.setAttribute("fill", "#8e405c"); star.setAttribute("stroke", "#392638");
+    star.setAttribute("stroke-width", "2");
+    const north = document.createElementNS(NS, "text");
+    north.setAttribute("x", obj.x); north.setAttribute("y", obj.y-57);
+    north.setAttribute("font-size", "18"); north.setAttribute("fill", "#8e405c");
+    north.textContent = "N";
+    group.append(circle, star, north);
+    return group;
+  }
+
+  return baseCreateSvgObject(obj);
+};
+
+// Text typography controls.
+function updateSelectedLabel(property, value) {
+  const obj = selectedObject();
+  if (!obj || obj.type !== "label") return;
+  obj[property] = value;
+  renderObjects();
+}
+$("textFont").addEventListener("change", event => {
+  updateSelectedLabel("fontFamily", event.target.value);
+  saveHistory(); storeCurrentMap();
+});
+$("textSpacing").addEventListener("input", event => {
+  const value = Number(event.target.value);
+  $("textSpacingLabel").textContent = value;
+  updateSelectedLabel("letterSpacing", value);
+});
+$("textSpacing").addEventListener("change", () => { saveHistory(); storeCurrentMap(); });
+$("curveSize").addEventListener("input", event => {
+  const value = Number(event.target.value);
+  $("curveSizeLabel").textContent = value;
+  updateSelectedLabel("curveSize", value);
+});
+$("curveSize").addEventListener("change", () => { saveHistory(); storeCurrentMap(); });
+$("textCurved").addEventListener("change", () => {
+  $("curveOptions").hidden = !$("textCurved").checked;
+});
+
+// Water wave direction is editable from the selected object's properties.
+const waveLabel = document.createElement("label");
+waveLabel.textContent = "Water wave direction";
+waveLabel.htmlFor = "waveDirection";
+const waveSelect = document.createElement("select");
+waveSelect.id = "waveDirection";
+waveSelect.className = "form-control";
+waveSelect.innerHTML = '<option value="horizontal">Horizontal</option><option value="vertical">Vertical</option>';
+$("objectProperties").insertBefore(waveLabel, $("createRegionSubmapBtn"));
+$("objectProperties").insertBefore(waveSelect, $("createRegionSubmapBtn"));
+const baseRenderProperties = renderProperties;
+renderProperties = function () {
+  baseRenderProperties();
+  const obj = selectedObject();
+  const isWater = obj?.type === "water";
+  waveLabel.hidden = !isWater;
+  waveSelect.hidden = !isWater;
+  if (isWater) waveSelect.value = obj.waveDirection || "horizontal";
+};
+waveSelect.addEventListener("change", event => {
+  const obj = selectedObject();
+  if (!obj || obj.type !== "water") return;
+  obj.waveDirection = event.target.value;
+  renderObjects(); saveHistory(); storeCurrentMap();
+});
+
+// Lake drawing and compass placement use the existing canvas tools.
+const baseHandleCanvasClick = handleCanvasClick;
+handleCanvasClick = function (event) {
+  if (state.tool === "compass") {
+    const point = pointFromEvent(event);
+    addObject({ type: "compass", x: point.x, y: point.y, name: "Compass Rose" });
+    setTool("select");
+    return;
+  }
+  baseHandleCanvasClick(event);
+};
+$("mapCanvas").addEventListener("dblclick", event => {
+  if (state.tool !== "lake") return;
+  event.preventDefault();
+  finishPolygon();
+});
+$("mapCanvas").addEventListener("contextmenu", event => {
+  if (state.tool !== "lake") return;
+  event.preventDefault();
+  finishPolygon();
+});
+
+// Canvas background and ocean conversion.
+$("applyBackgroundBtn").addEventListener("click", () => {
+  state.backgroundColor = $("backgroundColor").value;
+  $("canvasBackground").setAttribute("fill", state.backgroundColor);
+  saveHistory(); storeCurrentMap();
+  showToast("Canvas background updated.");
+});
+$("makeOceanBtn").addEventListener("click", () => {
+  if (!confirm("Turn the entire canvas into an ocean? Land shapes will be removed.")) return;
+  state.backgroundColor = "#78a9c9";
+  $("backgroundColor").value = state.backgroundColor;
+  $("canvasBackground").setAttribute("fill", state.backgroundColor);
+  state.objects = state.objects.filter(obj => !["land", "freehand", "lake"].includes(obj.type));
+  state.selectedId = null;
+  renderAll(); saveHistory(); storeCurrentMap();
+  showToast("The canvas is now a vast ocean.");
+});
+
+function transformSelectedShape(transformer, successMessage) {
+  const obj = selectedObject();
+  if (!obj || !["land", "freehand", "water", "lake"].includes(obj.type) || !Array.isArray(obj.points)) {
+    showToast("Select a land, lake or water shape first.");
+    return;
+  }
+  const xs = obj.points.map(p => p.x), ys = obj.points.map(p => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  obj.points = obj.points.map(point => transformer(point, cx, cy));
+  renderAll(); saveHistory(); storeCurrentMap(); showToast(successMessage);
+}
+$("rotateLandBtn").addEventListener("click", () => transformSelectedShape(
+  (p, cx, cy) => ({ x: cx - (p.y - cy), y: cy + (p.x - cx) }),
+  "Shape rotated 90 degrees."
+));
+$("flipLandBtn").addEventListener("click", () => transformSelectedShape(
+  (p, cx) => ({ x: cx - (p.x - cx), y: p.y }),
+  "Shape flipped horizontally."
+));
+
+// Grouping: select one object, then choose another; both move together.
+$("groupObjectsBtn").addEventListener("click", () => {
+  const first = selectedObject();
+  if (!first) { showToast("Select the land or text you want to group first."); return; }
+  const candidates = state.objects.filter(obj => obj.id !== first.id &&
+    ["land", "freehand", "label"].includes(obj.type));
+  if (!candidates.length) { showToast("Add another land shape or label first."); return; }
+  const menu = candidates.map((obj, i) => `${i + 1}. ${obj.name || obj.text || obj.type}`).join("\n");
+  const answer = prompt("Choose the object to group with the selected one:\n" + menu);
+  if (answer === null) return;
+  const second = candidates[Number(answer) - 1];
+  if (!second) { showToast("That object number is not valid."); return; }
+  const groupId = first.groupId || second.groupId || uid("group");
+  first.groupId = groupId; second.groupId = groupId;
+  saveHistory(); storeCurrentMap(); showToast("Objects grouped. Select and drag either one to move them together.");
+});
+
+let groupDragCopies = null;
+$("mapCanvas").addEventListener("pointerdown", () => {
+  groupDragCopies = null;
+  if (!state.draggingObject) return;
+  const selected = state.objects.find(obj => obj.id === state.draggingObject.id);
+  if (!selected?.groupId) return;
+  groupDragCopies = state.objects
+    .filter(obj => obj.groupId === selected.groupId && obj.id !== selected.id)
+    .map(obj => ({ id: obj.id, original: clone(obj) }));
+});
+$("mapCanvas").addEventListener("pointermove", event => {
+  if (!state.draggingObject || !groupDragCopies?.length) return;
+  const point = pointFromEvent(event);
+  const dx = point.x - state.draggingObject.start.x;
+  const dy = point.y - state.draggingObject.start.y;
+  groupDragCopies.forEach(item => {
+    const obj = state.objects.find(candidate => candidate.id === item.id);
+    if (!obj) return;
+    const original = item.original;
+    if (original.points) obj.points = original.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+    else if (original.type === "line") {
+      obj.x1 = original.x1 + dx; obj.y1 = original.y1 + dy;
+      obj.x2 = original.x2 + dx; obj.y2 = original.y2 + dy;
+    } else { obj.x = original.x + dx; obj.y = original.y + dy; }
+  });
+  renderObjects();
+});
+$("mapCanvas").addEventListener("pointerup", () => { groupDragCopies = null; });
+$("mapCanvas").addEventListener("pointercancel", () => { groupDragCopies = null; });
+
+// Surprise feature: compass rose placement.
+$("compassToolBtn").addEventListener("click", () => {
+  setTool("compass");
+  showToast("Click anywhere on the map to place a compass rose.");
+});
+
+// Tutorial placeholder.
+$("tutorialBtn").addEventListener("click", () => $("tutorialDialog").showModal());
+
+// Re-render after installing extensions so the controls reflect the current map.
+renderAll();
+
+
+/* ================================================================
+   AETHERCRYPT ATLAS — ADVANCED CARTOGRAPHY EXTENSION
+   Borders, realms, routes, islands, stamps, legends, notes,
+   layer ordering/groups, pins and historical timeline snapshots.
+   ================================================================ */
+
+state.pinGroups = state.pinGroups || ["Settlements", "Landmarks", "Danger zones", "Custom"];
+state.timeline = state.timeline || [];
+state.activeEra = state.activeEra || "Present";
+state.layerGroups = state.layerGroups || [];
+state.privateNotes = state.privateNotes || [];
+state.exportPrivateNotes = state.exportPrivateNotes || false;
+state.drawMode = "points";
+
+const atlasTools = ["island", "border", "trade", "coast", "frame"];
+const atlasHelp = {
+  island: "Create a small island. Point mode: click vertices, double-click to finish. Manual mode: drag to sketch.",
+  border: "Draw political borders or realm boundaries. Click points, then double-click to finish.",
+  trade: "Draw a trade route between settlements. Use point mode or manual mode.",
+  coast: "Add a decorative coastline stroke along any shore.",
+  frame: "Draw a rectangular decorative frame around an area of your map."
+};
+
+// Add font families without replacing the original choices.
+const fontSelect = $("textFont");
+if (fontSelect && ![...fontSelect.options].some(o => o.text === "Cinzel")) {
+  [
+    ["'Cinzel', Georgia, serif", "Cinzel"],
+    ["'Uncial Antiqua', Georgia, serif", "Uncial Antiqua"],
+    ["'Cormorant Garamond', Georgia, serif", "Cormorant Garamond"],
+    ["'IM Fell English', Georgia, serif", "IM Fell English"],
+    ["'Trebuchet MS', sans-serif", "Trebuchet MS"]
+  ].forEach(([value, label]) => { const option=document.createElement("option"); option.value=value; option.textContent=label; fontSelect.appendChild(option); });
+}
+const fontLink = document.createElement("link");
+fontLink.rel = "stylesheet";
+fontLink.href = "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:wght@400;600;700&family=IM+Fell+English&family=Uncial+Antiqua&display=swap";
+document.head.appendChild(fontLink);
+
+function svgEl(tag, attrs={}) { const el=document.createElementNS(NS,tag); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); return el; }
+function addAtlasObject(obj) { obj.id=uid("object"); obj.layerId=state.activeLayerId; obj.name=obj.name||obj.type; state.objects.push(obj); state.selectedId=obj.id; renderAll(); saveHistory(); storeCurrentMap(); }
+function addStamp(type, p) {
+  const common={type,x:p.x,y:p.y,color:state.brushColor,size:Math.max(28,state.brushSize*8)};
+  if(type==="volcano") addAtlasObject({...common,name:"Volcano"});
+  if(type==="city") addAtlasObject({...common,name:"City",size:Math.max(24,state.brushSize*6)});
+  if(type==="village") addAtlasObject({...common,name:"Village",size:Math.max(20,state.brushSize*5)});
+  if(type==="capital") addAtlasObject({...common,name:"Capital",size:Math.max(38,state.brushSize*9)});
+  if(type==="pin") {
+    const group=$("pinGroupSelect")?.value||"Settlements";
+    const label=prompt(`Name this ${group.toLowerCase()} pin:`, "Unnamed place");
+    if(label===null)return;
+    addAtlasObject({...common,type:"pin",name:label.trim()||"Unnamed place",group,color:"#b64d65"});
+  }
+}
+
+// Extend SVG rendering while preserving all existing object renderers.
+const originalCreateSvgObject = createSvgObject;
+createSvgObject = function(obj) {
+  let el=originalCreateSvgObject(obj);
+  if(el) return el;
+  const color=obj.color||"#8e718e", size=obj.size||32;
+  if(obj.type==="volcano") {
+    el=svgEl("g",{transform:`translate(${obj.x} ${obj.y})`});
+    el.append(svgEl("path",{d:`M ${-size*.65} ${size*.5} L ${-size*.2} ${-size*.35} L 0 ${size*.05} L ${size*.22} ${-size*.42} L ${size*.68} ${size*.5} Z`,fill:"#66505a",stroke:"#30232b","stroke-width":2}));
+    el.append(svgEl("path",{d:`M ${-size*.2} ${-size*.35} Q 0 ${-size*.8} ${size*.22} ${-size*.42}`,fill:"none",stroke:"#d75a4a","stroke-width":Math.max(3,size*.12),"stroke-linecap":"round"}));
+    el.append(svgEl("path",{d:`M ${-size*.12} ${size*.22} L 0 ${-size*.12} L ${size*.13} ${size*.22}`,fill:"none",stroke:"#e99b52","stroke-width":3}));
+  } else if(["city","village","capital"].includes(obj.type)) {
+    el=svgEl("g",{transform:`translate(${obj.x} ${obj.y})`});
+    const isCap=obj.type==="capital", isVillage=obj.type==="village";
+    const w=size*(isVillage?.72:1), h=size*(isVillage?.7:1);
+    el.append(svgEl("rect",{x:-w/2,y:-h*.15,width:w,height:h*.62,rx:2,fill:isCap?"#d7b56d":color,stroke:"#342638","stroke-width":2}));
+    el.append(svgEl("path",{d:`M ${-w*.62} ${-h*.15} L 0 ${-h*.72} L ${w*.62} ${-h*.15} Z`,fill:isCap?"#8e354b":"#6b4b59",stroke:"#342638","stroke-width":2}));
+    el.append(svgEl("rect",{x:-w*.1,y:h*.1,width:w*.2,height:h*.37,fill:"#342638"}));
+    if(isCap) el.append(svgEl("path",{d:`M 0 ${-h*.95} l ${-h*.13} ${h*.2} h ${h*.26} Z`,fill:"#e8c56e",stroke:"#5a3c2c","stroke-width":1}));
+    if(isVillage) el.append(svgEl("path",{d:`M ${-w*.5} ${h*.55} l ${w*.5} ${-h*.28} l ${w*.5} ${h*.28}`,fill:"none",stroke:"#b79b76","stroke-width":2}));
+  } else if(obj.type==="pin") {
+    el=svgEl("g",{transform:`translate(${obj.x} ${obj.y})`});
+    el.append(svgEl("path",{d:`M 0 ${size*.65} C ${-size*.15} ${size*.25}, ${-size*.55} ${-size*.05}, ${-size*.45} ${-size*.42} A ${size*.45} ${size*.45} 0 1 1 ${size*.45} ${-size*.42} C ${size*.55} ${-size*.05}, ${size*.15} ${size*.25}, 0 ${size*.65} Z`,fill:obj.color||"#b64d65",stroke:"#382537","stroke-width":2}));
+    el.append(svgEl("circle",{cx:0,cy:-size*.42,r:size*.13,fill:"#fff0dc"}));
+    const t=svgEl("text",{x:0,y:size*.92,"text-anchor":"middle","font-size":Math.max(12,size*.32),fill:color,"font-family":"Georgia,serif"});t.textContent=obj.name||"Pin";el.append(t);
+  }
+  return el;
+};
+
+// Border/realm/trade/coastline/frame objects are layered SVG strokes.
+const baseCreateSvgObject2=createSvgObject;
+createSvgObject=function(obj){
+  if(["border","trade","coast","frame"].includes(obj.type)){
+    const pts=obj.points||[]; const d=pts.map((p,i)=>`${i?"L":"M"} ${p.x} ${p.y}`).join(" ");
+    if(obj.type==="frame"){
+      const a=pts[0]||{x:0,y:0}, b=pts[1]||a;
+      return svgEl("rect",{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(b.x-a.x),height:Math.abs(b.y-a.y),fill:"none",stroke:obj.color||"#6c4d75","stroke-width":obj.strokeWidth||8,"stroke-dasharray":obj.pattern||"none",rx:obj.radius||0});
+    }
+    const path=svgEl("path",{d,fill:"none",stroke:obj.color||"#6d526f","stroke-width":obj.strokeWidth||3,"stroke-linecap":"round","stroke-linejoin":"round"});
+    if(obj.type==="border") {path.setAttribute("stroke-dasharray",obj.pattern||"10 7");path.setAttribute("stroke-width",obj.strokeWidth||4);}
+    if(obj.type==="trade") {path.setAttribute("stroke-dasharray","3 8");path.setAttribute("stroke-width",obj.strokeWidth||5);}
+    if(obj.type==="coast") {path.setAttribute("stroke-width",obj.strokeWidth||5);path.setAttribute("stroke-dasharray","2 5");}
+    return path;
+  }
+  return baseCreateSvgObject2(obj);
+};
+
+// Keep the extra object types in the SVG selection and rendering pipeline.
+const originalRenderLayers = renderLayers;
+renderLayers=function(){
+  originalRenderLayers();
+  const rows=[...$("layerList").children];
+  rows.forEach((row,index)=>{
+    const layer=state.layers[index]; if(!layer)return;
+    const up=document.createElement("button");up.className="layer-rename";up.textContent="↑";up.title="Move layer up";
+    up.addEventListener("click",()=>moveLayer(index,-1));
+    const down=document.createElement("button");down.className="layer-rename";down.textContent="↓";down.title="Move layer down";
+    down.addEventListener("click",()=>moveLayer(index,1));
+    row.append(up,down);
+  });
+};
+function moveLayer(index,delta){const next=index+delta;if(next<0||next>=state.layers.length)return;[state.layers[index],state.layers[next]]=[state.layers[next],state.layers[index]];renderAll();saveHistory();storeCurrentMap();}
+$("layerUpBtn")?.addEventListener("click",()=>{const i=state.layers.findIndex(l=>l.id===state.activeLayerId);moveLayer(i,-1);});
+$("layerDownBtn")?.addEventListener("click",()=>{const i=state.layers.findIndex(l=>l.id===state.activeLayerId);moveLayer(i,1);});
+
+// Layer groups are named collections; toggling a group toggles all its layers.
+$("layerGroupBtn")?.addEventListener("click",()=>{
+ const name=prompt("Name this layer group:","Continent group");if(!name?.trim())return;
+ const ids=state.layers.filter(l=>confirm(`Include layer “${l.name}” in ${name}?`)).map(l=>l.id);
+ if(!ids.length)return;state.layerGroups.push({id:uid("layergroup"),name:name.trim(),layerIds:ids});
+ saveHistory();storeCurrentMap();showToast(`Layer group “${name}” created.`);
+});
+$("renameLayerGroupBtn")?.addEventListener("click",()=>{
+ if(!state.layerGroups.length){showToast("Create a layer group first.");return;}
+ const menu=state.layerGroups.map((g,i)=>`${i+1}. ${g.name}`).join("\n");const n=Number(prompt("Choose group number to toggle visibility:\n"+menu));const g=state.layerGroups[n-1];if(!g)return;
+ const visible=!g.layerIds.every(id=>state.layers.find(l=>l.id===id)?.visible);
+ g.layerIds.forEach(id=>{const l=state.layers.find(x=>x.id===id);if(l)l.visible=visible;});renderAll();saveHistory();storeCurrentMap();
+});
+
+// The main drawing menu changes the active tool and the drawing mode together.
+$("drawMode")?.addEventListener("change",e=>{state.drawMode=e.target.value;showToast(`Drawing mode: ${state.drawMode==="points"?"point by point":"manual freehand"}.`);});
+document.querySelectorAll(".tool-btn").forEach(btn=>{
+ const tool=btn.dataset.tool;
+ if(atlasTools.includes(tool))btn.addEventListener("click",()=>{setTool(tool);showToast(`${toolHelp[tool]||atlasHelp[tool]} Mode: ${state.drawMode}.`);});
+});
+
+// Stamp tools and pins.
+const originalCanvasClickForAtlas=handleCanvasClick;
+handleCanvasClick=function(event){
+ const p=pointFromEvent(event), hit=event.target.closest?.("[data-object-id]"), hitId=hit?.dataset.objectId;
+ if(["volcano","city","village","capital","pin"].includes(state.tool)){addStamp(state.tool,p);return;}
+ if(["island","border","trade","coast","frame"].includes(state.tool)){
+   if(state.drawMode==="manual")return; // pointer handlers below own manual drawing
+   if(state.tool==="frame"){
+     if(!state.drawing){state.drawing={type:"frame",points:[p]};drawPreview(p);}else{const start=state.drawing.points[0];state.drawing=null;overlay.replaceChildren();addAtlasObject({type:"frame",points:[start,p],color:state.brushColor,strokeWidth:Math.max(3,state.brushSize)});}return;
+   }
+   if(!state.drawing||state.drawing.type!==state.tool)state.drawing={type:state.tool,points:[p]};else state.drawing.points.push(p);
+   drawPreview();return;
+ }
+ originalCanvasClickForAtlas(event);
+};
+
+// Manual drawing for island, borders, routes and coasts: press, drag, release.
+let manualStroke=null;
+canvas.addEventListener("pointerdown",e=>{
+ if(state.drawMode!=="manual"||!["island","border","trade","coast"].includes(state.tool)||e.button!==0)return;
+ e.preventDefault();manualStroke={type:state.tool,points:[pointFromEvent(e)]};canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove",e=>{
+ if(!manualStroke)return;const p=pointFromEvent(e),last=manualStroke.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)>4)manualStroke.points.push(p);
+ overlay.replaceChildren();const path=svgEl("polyline",{points:manualStroke.points.map(q=>`${q.x},${q.y}`).join(" "),fill:manualStroke.type==="island"?"#9eaa83":"none", "fill-opacity":".25",stroke:manualStroke.type==="trade"?"#c59a55":"#8e718e","stroke-width":Math.max(2,state.brushSize),"stroke-dasharray":manualStroke.type==="border"?"10 7":manualStroke.type==="trade"?"3 8":"none"});overlay.append(path);
+});
+function endManualStroke(){if(!manualStroke)return;const d=manualStroke;manualStroke=null;overlay.replaceChildren();if(d.points.length<2)return;if(d.type==="island"&&d.points.length<3){showToast("An island needs a few more points.");return;}addAtlasObject({type:d.type,points:d.points,color:d.type==="island"?"#a6b18b":state.brushColor,strokeWidth:Math.max(2,state.brushSize),name:d.type==="island"?"Island":d.type});}
+canvas.addEventListener("pointerup",endManualStroke);canvas.addEventListener("pointercancel",endManualStroke);
+
+// Complete the point-based special paths on double click or right click.
+function finishAtlasPath(){const d=state.drawing;if(!d||!atlasTools.includes(d.type)||d.type==="frame")return;state.drawing=null;overlay.replaceChildren();if(d.points.length<(d.type==="island"?3:2)){showToast("Add more points before finishing this feature.");return;}addAtlasObject({type:d.type,points:d.points,color:d.type==="island"?"#a6b18b":state.brushColor,strokeWidth:Math.max(2,state.brushSize),name:d.type==="island"?"Island":d.type==="border"?"Political border":d.type==="trade"?"Trade route":"Coastline"});}
+canvas.addEventListener("dblclick",e=>{if(atlasTools.includes(state.tool)){e.preventDefault();finishAtlasPath();}});
+canvas.addEventListener("contextmenu",e=>{if(state.drawing&&atlasTools.includes(state.drawing.type)){e.preventDefault();finishAtlasPath();}});
+
+// Custom legend: creates a movable map legend as a text label object.
+$("legendBtn")?.addEventListener("click",()=>{
+ const title=prompt("Legend title:","MAP LEGEND");if(title===null)return;
+ const lines=prompt("Legend entries (one per line; use symbol — meaning):","◆ — Capital\n● — City\n⌂ — Village\n〰 — River");if(lines===null)return;
+ const x=Number(prompt("Legend X position:","180"))||180,y=Number(prompt("Legend Y position:","180"))||180;
+ addAtlasObject({type:"label",name:"Custom legend",text:`${title}\n${lines}`,x,y,color:state.brushColor,fontSize:24,fontFamily:"Georgia, serif",letterSpacing:1});
+});
+
+// Private notes are stored in project JSON; optional export as map text.
+$("privateNotesBtn")?.addEventListener("click",()=>{
+ const note=prompt("Private cartographer's note (not visible on the map):","");if(note===null)return;
+ state.privateNotes.push({id:uid("note"),text:note,created:new Date().toISOString()});
+ const include=confirm("Include private notes in the next PNG export? (No keeps them private.)");state.exportPrivateNotes=include;
+ saveHistory();storeCurrentMap();showToast(include?"Note saved; it will be included in PNG export.":"Private note saved outside the map artwork.");
+});
+
+// Timeline mapper stores a complete snapshot for each named historical era.
+$("timelineBtn")?.addEventListener("click",()=>{
+ const action=prompt("Timeline Mapper\n1 = Save current era\n2 = Load an era\n3 = Delete an era","1");if(!action)return;
+ if(action==="1"){
+  const name=prompt("Name this historical era:",state.activeEra||"Before the War");if(!name?.trim())return;
+  const existing=state.timeline.findIndex(e=>e.name===name.trim());const era={id:uid("era"),name:name.trim(),data:snapshot(),savedAt:new Date().toISOString()};
+  if(existing>=0)state.timeline[existing]=era;else state.timeline.push(era);state.activeEra=era.name;saveHistory();storeCurrentMap();showToast(`Era “${era.name}” archived.`);
+ }else if(action==="2"){
+  if(!state.timeline.length){showToast("No historical eras saved yet.");return;}
+  const menu=state.timeline.map((e,i)=>`${i+1}. ${e.name}`).join("\n"),n=Number(prompt("Load which era?\n"+menu));const era=state.timeline[n-1];if(!era)return;
+  if(!confirm(`Load “${era.name}”? Save your current map as an era first if you want to preserve it.`))return;
+  restore(clone(era.data));state.activeEra=era.name;saveHistory();storeCurrentMap();showToast(`Loaded era: ${era.name}`);
+ }else if(action==="3"){
+  const menu=state.timeline.map((e,i)=>`${i+1}. ${e.name}`).join("\n"),n=Number(prompt("Delete which era?\n"+menu));if(!state.timeline[n-1])return;
+  if(confirm(`Delete “${state.timeline[n-1].name}”?`)){state.timeline.splice(n-1,1);storeCurrentMap();showToast("Historical era deleted.");}
+ }
+});
+
+// Pin groups are user-defined and can be renamed/classified freely.
+$("managePinGroupsBtn")?.addEventListener("click",()=>{
+ const action=prompt("Pin groups\n1 = Add group\n2 = Rename group\n3 = Remove group","1");if(!action)return;
+ if(action==="1"){const n=prompt("New group name:");if(n?.trim()){state.pinGroups.push(n.trim());refreshPinGroupOptions();}}
+ if(action==="2"){const i=Number(prompt("Group number to rename:\n"+state.pinGroups.map((g,i)=>`${i+1}. ${g}`).join("\n")))-1;const n=prompt("New group name:",state.pinGroups[i]||"");if(state.pinGroups[i]&&n?.trim()){const old=state.pinGroups[i];state.pinGroups[i]=n.trim();state.objects.filter(o=>o.type==="pin"&&o.group===old).forEach(o=>o.group=n.trim());}}
+ if(action==="3"){const i=Number(prompt("Group number to remove:\n"+state.pinGroups.map((g,i)=>`${i+1}. ${g}`).join("\n")))-1;if(state.pinGroups[i])state.pinGroups.splice(i,1);}
+ refreshPinGroupOptions();saveHistory();storeCurrentMap();
+});
+function refreshPinGroupOptions(){const s=$("pinGroupSelect");if(!s)return;const old=s.value;s.replaceChildren();state.pinGroups.forEach(g=>{const o=document.createElement("option");o.textContent=g;s.append(o);});if(state.pinGroups.includes(old))s.value=old;}
+refreshPinGroupOptions();
+
+// Export private notes as an unobtrusive footer only when explicitly enabled.
+const originalExportClick=document.querySelector("#exportBtn");
+originalExportClick?.addEventListener("click",()=>{
+ if(!state.exportPrivateNotes||!state.privateNotes.length)return;
+ // The regular PNG export remains clean; notes are also offered as a separate text file.
+ const text=state.privateNotes.map((n,i)=>`${i+1}. ${n.text}`).join("\n");
+ const blob=new Blob([`AETHERCRYPT ATLAS — PRIVATE NOTES\n\n${text}`],{type:"text/plain;charset=utf-8"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`${safeFilename(state.projectName)}-private-notes.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+
+// Persist extension metadata alongside the map snapshot without breaking older files.
+const originalSnapshot=snapshot;
+snapshot=function(){const data=originalSnapshot();data.pinGroups=clone(state.pinGroups);data.timeline=clone(state.timeline);data.layerGroups=clone(state.layerGroups);data.privateNotes=clone(state.privateNotes);data.exportPrivateNotes=state.exportPrivateNotes;data.activeEra=state.activeEra;return data;};
+const originalRestore=restore;
+restore=function(data){originalRestore(data);state.pinGroups=Array.isArray(data.pinGroups)?clone(data.pinGroups):["Settlements","Landmarks","Danger zones","Custom"];state.timeline=Array.isArray(data.timeline)?clone(data.timeline):[];state.layerGroups=Array.isArray(data.layerGroups)?clone(data.layerGroups):[];state.privateNotes=Array.isArray(data.privateNotes)?clone(data.privateNotes):[];state.exportPrivateNotes=Boolean(data.exportPrivateNotes);state.activeEra=data.activeEra||"Present";refreshPinGroupOptions();};
+
+// Ensure the special point-drawn tools complete with the normal shortcuts.
+const previousToolHelp=toolHelp;
+Object.assign(previousToolHelp,atlasHelp,{volcano:"Click to place a volcano stamp.",city:"Click to place a city marker.",village:"Click to place a village marker.",capital:"Click to place a capital marker.",pin:"Click to place a categorized pin."});
+renderAll();
+
+// PNG note visibility: temporarily add notes to the SVG only for the export click.
+document.addEventListener("click", event => {
+  if (event.target?.id !== "exportBtn" || !state.exportPrivateNotes || !state.privateNotes.length) return;
+  const group = svgEl("g", { id: "temporaryPrivateNotesExport" });
+  const bg = svgEl("rect", { x: 24, y: state.height - Math.min(260, 45 + state.privateNotes.length * 24), width: Math.min(760, state.width - 48), height: Math.min(240, 24 + state.privateNotes.length * 24), rx: 8, fill: "#17111b", opacity: ".88" });
+  group.append(bg);
+  const heading = svgEl("text", { x: 42, y: state.height - Math.min(260, 45 + state.privateNotes.length * 24) + 25, fill: "#e5c9f4", "font-size": 17, "font-family": "Georgia,serif" }); heading.textContent = "CARTOGRAPHER'S NOTES"; group.append(heading);
+  state.privateNotes.slice(0, 8).forEach((note, index) => { const t=svgEl("text", { x:42, y:state.height-Math.min(260,45+state.privateNotes.length*24)+50+index*21, fill:"#f3eaf5", "font-size":14 });t.textContent=note.text;group.append(t); });
+  canvas.append(group);
+  setTimeout(() => group.remove(), 0);
+}, true);
