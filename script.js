@@ -64,7 +64,8 @@ function snapshot() {
     layers: clone(state.layers),
     activeLayerId: state.activeLayerId,
     objects: clone(state.objects),
-    backgroundColor: state.backgroundColor || "#f2eadb"
+    backgroundColor: state.backgroundColor || "#f2eadb",
+    backgroundIsOcean: !!state.backgroundIsOcean
   };
 }
 
@@ -80,7 +81,8 @@ function restore(data) {
     ? data.activeLayerId : state.layers[0].id;
   state.objects = Array.isArray(data.objects) ? clone(data.objects) : [];
   state.backgroundColor = data.backgroundColor || "#f2eadb";
-  $("canvasBackground").setAttribute("fill", state.backgroundColor);
+  state.backgroundIsOcean = !!data.backgroundIsOcean;
+  $("canvasBackground").setAttribute("fill", state.backgroundIsOcean ? "url(#oceanWavePattern)" : state.backgroundColor);
   if ($("backgroundColor")) $("backgroundColor").value = state.backgroundColor;
   state.selectedId = null;
   state.drawing = null;
@@ -120,6 +122,7 @@ function updateHistoryButtons() {
 }
 
 const toolHelp = {
+  image: "Click the map to place the imported image.",
   select: "Select an object, edit its properties or link a region to a submap.",
   pan: "Drag to move around the canvas. You can also use the middle mouse button.",
   land: "Click to add polygon points. Double-click or right-click to finish.",
@@ -200,6 +203,7 @@ function updateCanvasDimensions() {
 
 function renderAll() {
   updateCanvasDimensions();
+  $("canvasBackground").setAttribute("fill", state.backgroundIsOcean ? "url(#oceanWavePattern)" : (state.backgroundColor || "#f2eadb"));
   renderObjects();
   renderLayers();
   renderProperties();
@@ -216,7 +220,15 @@ function updateProjectName() {
 function createSvgObject(obj) {
   let el;
 
-  if (obj.type === "land" || obj.type === "water" || obj.type === "freehand") {
+  if (obj.type === "image") {
+    el = document.createElementNS(NS, "image");
+    el.setAttribute("x", obj.x || 0);
+    el.setAttribute("y", obj.y || 0);
+    el.setAttribute("width", obj.width || 360);
+    el.setAttribute("height", obj.height || 240);
+    el.setAttribute("href", obj.href || "");
+    el.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  } else if (obj.type === "land" || obj.type === "water" || obj.type === "freehand") {
     el = document.createElementNS(NS, "polygon");
     el.setAttribute("points", (obj.points || []).map(p => `${p.x},${p.y}`).join(" "));
     el.setAttribute("fill", obj.color);
@@ -1172,16 +1184,40 @@ $("exportBtn").addEventListener("click", () => {
 });
 
 $("suggestionsBtn").addEventListener("click", () => $("suggestionsDialog").showModal());
-$("suggestionForm").addEventListener("submit", event => {
+$("suggestionForm").addEventListener("submit", async event => {
   event.preventDefault();
   const category = $("suggestionType").value;
   const message = $("suggestionText").value.trim();
   if (!message) return;
-  const subject = encodeURIComponent(`[Atlas suggestion] ${category}`);
-  const body = encodeURIComponent(`${message}\n\n— The Aethercrypt: Atlas`);
-  window.location.href = `mailto:?subject=${subject}&body=${body}`;
-  $("suggestionsDialog").close();
-  showToast("Your email app should open with the suggestion prepared.");
+  const submitButton = $("suggestionForm").querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = "Sending…";
+  try {
+    const response = await fetch("https://formsubmit.co/ajax/jackiethearticwolf@gmail.com", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({
+        name: "Aethercrypt Atlas community suggestion",
+        _subject: `Aethercrypt Atlas — ${category}`,
+        category,
+        message,
+        source: "The Aethercrypt: Atlas"
+      })
+    });
+    const result = await response.json();
+    if (String(result.success) !== "true") {
+      throw new Error(result.message || "The form service could not accept the suggestion.");
+    }
+    showToast("Suggestion sent! Thank you for helping improve Atlas.");
+    $("suggestionText").value = "";
+    $("suggestionsDialog").close();
+  } catch (error) {
+    console.error("Suggestion delivery failed:", error);
+    showToast(`Could not send suggestion: ${error.message || "check your connection"}.`);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Send suggestion";
+  }
 });
 
 $("aboutBtn").addEventListener("click", () => $("aboutDialog").showModal());
@@ -1426,6 +1462,7 @@ $("mapCanvas").addEventListener("contextmenu", event => {
 // Canvas background and ocean conversion.
 $("applyBackgroundBtn").addEventListener("click", () => {
   state.backgroundColor = $("backgroundColor").value;
+  state.backgroundIsOcean = false;
   $("canvasBackground").setAttribute("fill", state.backgroundColor);
   saveHistory(); storeCurrentMap();
   showToast("Canvas background updated.");
@@ -1433,8 +1470,9 @@ $("applyBackgroundBtn").addEventListener("click", () => {
 $("makeOceanBtn").addEventListener("click", () => {
   if (!confirm("Turn the entire canvas into an ocean? Land shapes will be removed.")) return;
   state.backgroundColor = "#78a9c9";
+  state.backgroundIsOcean = true;
   $("backgroundColor").value = state.backgroundColor;
-  $("canvasBackground").setAttribute("fill", state.backgroundColor);
+  $("canvasBackground").setAttribute("fill", "url(#oceanWavePattern)");
   state.objects = state.objects.filter(obj => !["land", "freehand", "lake"].includes(obj.type));
   state.selectedId = null;
   renderAll(); saveHistory(); storeCurrentMap();
@@ -1536,7 +1574,7 @@ state.privateNotes = state.privateNotes || [];
 state.exportPrivateNotes = state.exportPrivateNotes || false;
 state.drawMode = "points";
 
-const atlasTools = ["island", "border", "trade", "coast", "frame"];
+const atlasTools = ["island", "border", "trade", "coast", "frame", "river"];
 const atlasHelp = {
   island: "Create a small island. Point mode: click vertices, double-click to finish. Manual mode: drag to sketch.",
   border: "Draw political borders or realm boundaries. Click points, then double-click to finish.",
@@ -1609,7 +1647,7 @@ createSvgObject = function(obj) {
 // Border/realm/trade/coastline/frame objects are layered SVG strokes.
 const baseCreateSvgObject2=createSvgObject;
 createSvgObject=function(obj){
-  if(["border","trade","coast","frame"].includes(obj.type)){
+  if(["border","trade","coast","frame","river"].includes(obj.type)){
     const pts=obj.points||[]; const d=pts.map((p,i)=>`${i?"L":"M"} ${p.x} ${p.y}`).join(" ");
     if(obj.type==="frame"){
       const a=pts[0]||{x:0,y:0}, b=pts[1]||a;
@@ -1619,6 +1657,7 @@ createSvgObject=function(obj){
     if(obj.type==="border") {path.setAttribute("stroke-dasharray",obj.pattern||"10 7");path.setAttribute("stroke-width",obj.strokeWidth||4);}
     if(obj.type==="trade") {path.setAttribute("stroke-dasharray","3 8");path.setAttribute("stroke-width",obj.strokeWidth||5);}
     if(obj.type==="coast") {path.setAttribute("stroke-width",obj.strokeWidth||5);path.setAttribute("stroke-dasharray","2 5");}
+    if(obj.type==="river") {path.setAttribute("stroke", "#5c9fc0");path.setAttribute("stroke-width", (obj.strokeWidth||5)*1.8);path.setAttribute("stroke-linecap","round");}
     return path;
   }
   return baseCreateSvgObject2(obj);
@@ -1668,7 +1707,7 @@ const originalCanvasClickForAtlas=handleCanvasClick;
 handleCanvasClick=function(event){
  const p=pointFromEvent(event), hit=event.target.closest?.("[data-object-id]"), hitId=hit?.dataset.objectId;
  if(["volcano","city","village","capital","pin"].includes(state.tool)){addStamp(state.tool,p);return;}
- if(["island","border","trade","coast","frame"].includes(state.tool)){
+ if(["island","border","trade","coast","frame","river"].includes(state.tool)){
    if(state.drawMode==="manual")return; // pointer handlers below own manual drawing
    if(state.tool==="frame"){
      if(!state.drawing){state.drawing={type:"frame",points:[p]};drawPreview(p);}else{const start=state.drawing.points[0];state.drawing=null;overlay.replaceChildren();addAtlasObject({type:"frame",points:[start,p],color:state.brushColor,strokeWidth:Math.max(3,state.brushSize)});}return;
@@ -1682,6 +1721,7 @@ handleCanvasClick=function(event){
 // Manual drawing for island, borders, routes and coasts: press, drag, release.
 let manualStroke=null;
 canvas.addEventListener("pointerdown",e=>{
+ if(true)return; // superseded by the unified manual-drawing handler below
  if(state.drawMode!=="manual"||!["island","border","trade","coast"].includes(state.tool)||e.button!==0)return;
  e.preventDefault();manualStroke={type:state.tool,points:[pointFromEvent(e)]};canvas.setPointerCapture(e.pointerId);
 });
@@ -1693,7 +1733,16 @@ function endManualStroke(){if(!manualStroke)return;const d=manualStroke;manualSt
 canvas.addEventListener("pointerup",endManualStroke);canvas.addEventListener("pointercancel",endManualStroke);
 
 // Complete the point-based special paths on double click or right click.
-function finishAtlasPath(){const d=state.drawing;if(!d||!atlasTools.includes(d.type)||d.type==="frame")return;state.drawing=null;overlay.replaceChildren();if(d.points.length<(d.type==="island"?3:2)){showToast("Add more points before finishing this feature.");return;}addAtlasObject({type:d.type,points:d.points,color:d.type==="island"?"#a6b18b":state.brushColor,strokeWidth:Math.max(2,state.brushSize),name:d.type==="island"?"Island":d.type==="border"?"Political border":d.type==="trade"?"Trade route":"Coastline"});}
+function finishAtlasPath(){
+ const d=state.drawing;
+ if(!d || !atlasTools.includes(d.type) || d.type==="frame") return;
+ state.drawing=null; overlay.replaceChildren();
+ const closed=["island"].includes(d.type);
+ const min=closed?3:2;
+ if(d.points.length<min){showToast(`${d.type} needs at least ${min} points.`);return;}
+ const colors={island:"#a6b18b",river:"#5c9fc0",border:"#8e526e",trade:"#c59a55",coast:"#6c9caa"};
+ addAtlasObject({type:d.type,points:d.points.map(p=>({x:p.x,y:p.y})),color:colors[d.type]||state.brushColor,strokeWidth:Math.max(2,state.brushSize),name:d.type==="island"?"Island":d.type==="border"?"Political border":d.type==="trade"?"Trade route":d.type==="river"?"River":"Coastline"});
+}
 canvas.addEventListener("dblclick",e=>{if(atlasTools.includes(state.tool)){e.preventDefault();finishAtlasPath();}});
 canvas.addEventListener("contextmenu",e=>{if(state.drawing&&atlasTools.includes(state.drawing.type)){e.preventDefault();finishAtlasPath();}});
 
@@ -1774,3 +1823,286 @@ document.addEventListener("click", event => {
   canvas.append(group);
   setTimeout(() => group.remove(), 0);
 }, true);
+
+
+/* FIX: ask for the drawing method every time a compatible tool is selected. */
+const modeTools = new Set(["land","water","lake","river","island","border","trade","coast","frame"]);
+let pendingModeTool = null;
+const modeDialog = $("drawingModeDialog");
+document.querySelectorAll('.tool-btn').forEach(button => {
+  if (!modeTools.has(button.dataset.tool)) return;
+  button.addEventListener("click", () => {
+    pendingModeTool = button.dataset.tool;
+    const readable = button.textContent.trim();
+    $("drawingModeTitle").textContent = `How would you like to draw ${readable.toLowerCase()}?`;
+    if (!modeDialog.open) modeDialog.showModal();
+  });
+});
+document.querySelectorAll("[data-draw-mode]").forEach(button => {
+  button.addEventListener("click", () => {
+    if (!pendingModeTool) return;
+    state.drawMode = button.dataset.drawMode;
+    const tool = pendingModeTool;
+    pendingModeTool = null;
+    state.drawing = null; overlay.replaceChildren();
+    setTool(tool);
+    modeDialog.close();
+    showToast(`${tool} selected — ${state.drawMode === "manual" ? "drag to draw" : "click points; double-click to finish"}.`);
+  });
+});
+
+/* FIX: all area/path tools support both freehand dragging and point placement. */
+const manualAreaTools = new Set(["land","water","lake","river","island","border","trade","coast","frame"]);
+let atlasManualStroke = null;
+let ignoreNextAtlasClick = false;
+const oldAtlasClickHandler = handleCanvasClick;
+handleCanvasClick = function(event) {
+  if (ignoreNextAtlasClick) { ignoreNextAtlasClick = false; return; }
+  if (state.drawMode === "manual" && manualAreaTools.has(state.tool)) return;
+  oldAtlasClickHandler(event);
+};
+function atlasStrokeStyle(type) {
+  if (type === "river") return {stroke:"#5c9fc0", fill:"none", dash:"none"};
+  if (type === "border") return {stroke:"#8e526e", fill:"none", dash:"10 7"};
+  if (type === "trade") return {stroke:"#c59a55", fill:"none", dash:"3 8"};
+  if (type === "coast") return {stroke:"#6c9caa", fill:"none", dash:"2 5"};
+  if (type === "island") return {stroke:"#687653", fill:"#a6b18b", dash:"none"};
+  if (type === "water" || type === "lake") return {stroke:type === "lake" ? "#397d77" : "#477d9f", fill:type === "lake" ? "#65a9a0" : "#78a9c9", dash:"none"};
+  return {stroke:state.brushColor, fill:state.brushColor, dash:"none"};
+}
+canvas.addEventListener("pointerdown", event => {
+  if (state.drawMode !== "manual" || !manualAreaTools.has(state.tool) || event.button !== 0) return;
+  event.preventDefault();
+  const type = state.tool;
+  const p = pointFromEvent(event);
+  atlasManualStroke = {type, points:[p], start:p};
+  canvas.setPointerCapture(event.pointerId);
+  ignoreNextAtlasClick = true;
+});
+canvas.addEventListener("pointermove", event => {
+  if (!atlasManualStroke) return;
+  const p = pointFromEvent(event), last = atlasManualStroke.points[atlasManualStroke.points.length-1];
+  if (Math.hypot(p.x-last.x,p.y-last.y) >= 3) atlasManualStroke.points.push(p);
+  overlay.replaceChildren();
+  const style = atlasStrokeStyle(atlasManualStroke.type);
+  if (atlasManualStroke.type === "frame") {
+    overlay.append(svgEl("rect",{x:Math.min(atlasManualStroke.start.x,p.x),y:Math.min(atlasManualStroke.start.y,p.y),width:Math.abs(p.x-atlasManualStroke.start.x),height:Math.abs(p.y-atlasManualStroke.start.y),fill:"none",stroke:style.stroke,"stroke-width":Math.max(3,state.brushSize),"stroke-dasharray":"6 4"}));
+  } else if (["land","water","lake","island"].includes(atlasManualStroke.type)) {
+    overlay.append(svgEl("polygon",{points:atlasManualStroke.points.map(q=>`${q.x},${q.y}`).join(" "),fill:style.fill,"fill-opacity":".28",stroke:style.stroke,"stroke-width":Math.max(2,state.brushSize),"stroke-dasharray":style.dash}));
+  } else {
+    overlay.append(svgEl("polyline",{points:atlasManualStroke.points.map(q=>`${q.x},${q.y}`).join(" "),fill:"none",stroke:style.stroke,"stroke-width":Math.max(2,state.brushSize),"stroke-dasharray":style.dash,"stroke-linecap":"round","stroke-linejoin":"round"}));
+  }
+});
+function finishAtlasManualStroke() {
+  if (!atlasManualStroke) return;
+  const d = atlasManualStroke; atlasManualStroke = null; overlay.replaceChildren();
+  const closed = ["land","water","lake","island"].includes(d.type);
+  if (d.type === "frame") {
+    const p = d.points[d.points.length-1];
+    if (Math.abs(p.x-d.start.x)<5 || Math.abs(p.y-d.start.y)<5) { showToast("Drag to create a larger frame."); return; }
+    addAtlasObject({type:"frame",points:[d.start,p],color:state.brushColor,strokeWidth:Math.max(3,state.brushSize)});
+    return;
+  }
+  if (d.points.length < (closed ? 3 : 2)) { showToast("Draw a little farther to create this feature."); return; }
+  const colors = {land:state.brushColor,water:"#78a9c9",lake:"#65a9a0",island:"#a6b18b",river:"#5c9fc0",border:"#8e526e",trade:"#c59a55",coast:"#6c9caa"};
+  addAtlasObject({type:d.type,points:d.points,color:colors[d.type],strokeWidth:Math.max(2,state.brushSize),name:d.type==="border"?"Political border":d.type==="trade"?"Trade route":d.type[0].toUpperCase()+d.type.slice(1)});
+}
+canvas.addEventListener("pointerup", finishAtlasManualStroke);
+canvas.addEventListener("pointercancel", finishAtlasManualStroke);
+
+// Rivers now use the same unified point-path finisher as other line tools.
+
+const previousDrawPreview = drawPreview;
+drawPreview = function(point=null) {
+  previousDrawPreview(point);
+  const d=state.drawing;
+  if(!d || !["island","border","trade","coast","river"].includes(d.type)) return;
+  const pts=[...d.points]; if(point) pts.push(point);
+  const style=atlasStrokeStyle(d.type);
+  const path=svgEl("polyline",{points:pts.map(p=>`${p.x},${p.y}`).join(" "),fill:"none",stroke:style.stroke,"stroke-width":Math.max(2,state.brushSize),"stroke-dasharray":style.dash,"stroke-linecap":"round","stroke-linejoin":"round",opacity:".8"});
+  overlay.append(path);
+  if(d.type==="island" && pts.length>=3){const shape=svgEl("polygon",{points:pts.map(p=>`${p.x},${p.y}`).join(" "),fill:style.fill,"fill-opacity":".22",stroke:style.stroke,"stroke-width":2});overlay.insertBefore(shape,path);}
+};
+
+
+/* ================================================================
+   PATCH: island persistence, visually distinct pin categories,
+   and a reusable private-notes manager.
+   ================================================================ */
+
+// Islands are closed polygon objects. The previous renderer did not
+// recognize type "island", so saved islands existed but were invisible.
+const createSvgObjectBeforeIslandFix = createSvgObject;
+createSvgObject = function(obj) {
+  if (obj && obj.type === "island") {
+    const polygon = svgEl("polygon", {
+      points: (obj.points || []).map(p => `${p.x},${p.y}`).join(" "),
+      fill: obj.color || "#a6b18b",
+      "fill-opacity": obj.fillOpacity || ".88",
+      stroke: obj.stroke || "#687653",
+      "stroke-width": obj.strokeWidth || 3,
+      "stroke-linejoin": "round",
+      "stroke-linecap": "round"
+    });
+    // A subtle inner contour gives islands a cartographic look distinct from land.
+    const group = svgEl("g", {});
+    group.append(polygon);
+    const contour = svgEl("polygon", {
+      points: (obj.points || []).map(p => {
+        const cx = (obj.points || []).reduce((a, q) => a + q.x, 0) / Math.max(1, obj.points.length);
+        const cy = (obj.points || []).reduce((a, q) => a + q.y, 0) / Math.max(1, obj.points.length);
+        return `${cx + (p.x-cx)*.88},${cy + (p.y-cy)*.88}`;
+      }).join(" "),
+      fill: "none", stroke: "#e0d7ad", "stroke-width": 2,
+      "stroke-dasharray": "5 7", opacity: ".8", "pointer-events": "none"
+    });
+    group.append(contour);
+    return group;
+  }
+  if (obj && obj.type === "pin") {
+    const category = String(obj.group || "Custom").toLowerCase();
+    const presets = [
+      { test: /settlement|city|capital|village|pobl|asent/, color: "#b84f59", glyph: "⌂" },
+      { test: /landmark|monument|historic|ruin|hito/, color: "#c49a45", glyph: "✦" },
+      { test: /danger|enemy|hazard|peligro/, color: "#9d3548", glyph: "!" },
+      { test: /trade|route|port|harbor|comerc/, color: "#4d8d91", glyph: "⚓" }
+    ];
+    const style = presets.find(item => item.test.test(category)) || { color: obj.color || "#8062a3", glyph: "◆" };
+    const size = obj.size || 32;
+    const g = svgEl("g", { transform: `translate(${obj.x} ${obj.y})` });
+    g.append(svgEl("path", {
+      d: `M 0 ${size*.72} C ${-size*.12} ${size*.35}, ${-size*.58} ${-size*.02}, ${-size*.48} ${-size*.43} A ${size*.48} ${size*.48} 0 1 1 ${size*.48} ${-size*.43} C ${size*.58} ${-size*.02}, ${size*.12} ${size*.35}, 0 ${size*.72} Z`,
+      fill: style.color, stroke: "#302334", "stroke-width": 2
+    }));
+    g.append(svgEl("circle", { cx: 0, cy: -size*.43, r: size*.31, fill: "#f5ead8", stroke: "#302334", "stroke-width": 1.2 }));
+    const glyph = svgEl("text", { x: 0, y: -size*.32, "text-anchor": "middle", "dominant-baseline": "central", "font-size": size*.43, fill: style.color, "font-weight": "700", "font-family": "Georgia,serif" });
+    glyph.textContent = style.glyph;
+    g.append(glyph);
+    const label = svgEl("text", { x: 0, y: size*.98, "text-anchor": "middle", "font-size": Math.max(12, size*.31), fill: "#352a37", "font-family": "Georgia,serif", "paint-order": "stroke", stroke: "#f2eadb", "stroke-width": 3 });
+    label.textContent = obj.name || "Pin";
+    g.append(label);
+    return g;
+  }
+  return createSvgObjectBeforeIslandFix(obj);
+};
+
+// Make pin group appearance explicit and persistent when a pin is created.
+const addStampBeforePinFix = addStamp;
+addStamp = function(type, point) {
+  if (type !== "pin") return addStampBeforePinFix(type, point);
+  const group = $("pinGroupSelect")?.value || "Settlements";
+  const label = prompt(`Name this ${group.toLowerCase()} pin:`, "Unnamed place");
+  if (label === null) return;
+  const category = group.toLowerCase();
+  const color = /settlement|city|capital|village|pobl|asent/.test(category) ? "#b84f59"
+    : /landmark|monument|historic|ruin|hito/.test(category) ? "#c49a45"
+    : /danger|enemy|hazard|peligro/.test(category) ? "#9d3548"
+    : /trade|route|port|harbor|comerc/.test(category) ? "#4d8d91" : "#8062a3";
+  addAtlasObject({ type: "pin", x: point.x, y: point.y, size: Math.max(28, state.brushSize*8), name: label.trim() || "Unnamed place", group, color });
+};
+
+// Private notes manager: notes can be listed, reopened, edited, deleted,
+// and independently included/excluded from PNG export.
+function openPrivateNotesManager() {
+  state.privateNotes = Array.isArray(state.privateNotes) ? state.privateNotes : [];
+  const menu = () => {
+    const exportChoice = state.exportPrivateNotes ? "ON" : "OFF";
+    const list = state.privateNotes.length
+      ? state.privateNotes.map((note, i) => `${i+1}. ${note.text}`).join("\n")
+      : "No notes saved yet.";
+    const choice = prompt(
+      `PRIVATE CARTOGRAPHER NOTES\n\n${list}\n\nPNG export: ${exportChoice}\n\nChoose an action:\n1 = Add note\n2 = View a note\n3 = Edit a note\n4 = Delete a note\n5 = Toggle PNG export\n6 = Close`,
+      "1"
+    );
+    if (choice === null || choice === "6") return;
+    if (choice === "1") {
+      const text = prompt("Write your private note:", "");
+      if (text && text.trim()) state.privateNotes.push({ id: uid("note"), text: text.trim(), created: new Date().toISOString() });
+    } else if (["2", "3", "4"].includes(choice)) {
+      if (!state.privateNotes.length) { showToast("There are no notes to manage yet."); return; }
+      const index = Number(prompt(`Enter the note number:\n${state.privateNotes.map((n,i)=>`${i+1}. ${n.text}`).join("\n")}`, "1")) - 1;
+      const note = state.privateNotes[index];
+      if (!note) { showToast("That note number does not exist."); return; }
+      if (choice === "2") alert(`PRIVATE NOTE ${index+1}\n\n${note.text}`);
+      if (choice === "3") {
+        const edited = prompt("Edit this note:", note.text);
+        if (edited !== null) note.text = edited;
+      }
+      if (choice === "4" && confirm("Delete this note permanently?")) state.privateNotes.splice(index, 1);
+    } else if (choice === "5") {
+      state.exportPrivateNotes = !state.exportPrivateNotes;
+      showToast(`Private notes in PNG export: ${state.exportPrivateNotes ? "ON" : "OFF"}.`);
+    } else {
+      showToast("Choose an action from 1 to 6.");
+      return;
+    }
+    saveHistory(); storeCurrentMap();
+    // Reopen the manager so notes can be browsed without creating a new note.
+    openPrivateNotesManager();
+  };
+  menu();
+}
+const privateNotesButton = $("privateNotesBtn");
+if (privateNotesButton) {
+  const replacement = privateNotesButton.cloneNode(true);
+  privateNotesButton.parentNode.replaceChild(replacement, privateNotesButton);
+  replacement.addEventListener("click", openPrivateNotesManager);
+}
+
+
+/* ================================================================
+   ADDITIONS: image import, clear map, ocean waves and river fix.
+   ================================================================ */
+let pendingAtlasImage = null;
+$("addImageBtn")?.addEventListener("click", () => $("imageFileInput").click());
+$("imageFileInput")?.addEventListener("change", event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) { showToast("Choose an image file."); event.target.value=""; return; }
+  if (file.size > 12 * 1024 * 1024) { showToast("Please choose an image smaller than 12 MB."); event.target.value=""; return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingAtlasImage = String(reader.result);
+    setTool("image");
+    showToast("Image ready. Click on the map where you want to place it.");
+  };
+  reader.onerror = () => showToast("The image could not be read.");
+  reader.readAsDataURL(file);
+  event.target.value = "";
+});
+
+const previousAtlasClickWithImages = handleCanvasClick;
+handleCanvasClick = function(event) {
+  if (state.tool === "image" && pendingAtlasImage) {
+    const point = pointFromEvent(event);
+    const img = new Image();
+    const data = pendingAtlasImage;
+    img.onload = () => {
+      const maxWidth = 520, maxHeight = 360;
+      const scale = Math.min(1, maxWidth / img.naturalWidth, maxHeight / img.naturalHeight);
+      const width = Math.max(40, img.naturalWidth * scale);
+      const height = Math.max(40, img.naturalHeight * scale);
+      addAtlasObject({ type:"image", href:data, x:point.x-width/2, y:point.y-height/2, width, height, name:"Imported image" });
+      pendingAtlasImage = null;
+      setTool("select");
+      showToast("Image added to the map. Select it to move it.");
+    };
+    img.onerror = () => { pendingAtlasImage=null; showToast("Could not load that image."); };
+    img.src = data;
+    return;
+  }
+  previousAtlasClickWithImages(event);
+};
+
+$("clearBtn")?.addEventListener("click", () => {
+  if (!state.objects.length) { showToast("The map is already clear."); return; }
+  if (!confirm("Clear every object from this map? This can be undone with Undo.")) return;
+  state.objects = [];
+  state.selectedId = null;
+  state.drawing = null;
+  overlay.replaceChildren();
+  renderAll();
+  saveHistory();
+  storeCurrentMap();
+  showToast("Map cleared. Use Undo to restore it.");
+});

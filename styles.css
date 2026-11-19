@@ -265,3 +265,16 @@ textarea:focus-visible, select.form-control:focus-visible { outline: 2px solid v
 .layer-order-actions .btn { flex:1; min-height:29px; padding:5px; }
 #mapCanvas [data-object-id] { vector-effect: non-scaling-stroke; }
 #mapCanvas[data-tool="border"], #mapCanvas[data-tool="trade"], #mapCanvas[data-tool="coast"], #mapCanvas[data-tool="island"], #mapCanvas[data-tool="frame"] { cursor:crosshair; }
+
+/* Drawing method chooser */
+.mode-dialog { width:min(560px, calc(100vw - 32px)); }
+.mode-choice-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:20px; }
+.mode-choice { display:flex; flex-direction:column; align-items:flex-start; gap:8px; min-height:150px; padding:18px; border:1px solid #654d68; border-radius:12px; background:#211925; color:#f1e6f0; text-align:left; cursor:pointer; }
+.mode-choice:hover { border-color:#c59a75; background:#302238; }
+.mode-choice-icon { font-size:30px; color:#d7b5a0; }
+.mode-choice strong { font-family:Georgia,serif; font-size:17px; }
+.mode-choice small { color:#bcaebe; line-height:1.45; }
+@media(max-width:520px){.mode-choice-grid{grid-template-columns:1fr}.mode-choice{min-height:110px}}
+
+.clear-btn { color: #e7a3ad; border-color: #70414d; }
+.clear-btn:hover { background: #44232d; color: #ffe1e5; }

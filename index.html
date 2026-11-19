@@ -32,6 +32,8 @@
       <button class="btn" id="saveBtn">Save</button>
       <button class="btn" id="submapsBtn">Submaps</button>
       <button class="btn" id="resizeBtn">Canvas size</button>
+      <button class="btn" id="addImageBtn" type="button">Add image</button>
+      <input id="imageFileInput" type="file" accept="image/*" hidden>
       <button class="btn" id="suggestionsBtn">Suggestions</button>
       <button class="btn" id="tutorialBtn">Tutorial</button>
       <button class="btn" id="aboutBtn">About</button>
@@ -96,6 +98,7 @@
         <div class="view-controls">
           <button id="undoBtn" class="icon-btn" title="Undo (Ctrl+Z)">↶</button>
           <button id="redoBtn" class="icon-btn" title="Redo (Ctrl+Y)">↷</button>
+          <button id="clearBtn" class="icon-btn clear-btn" title="Clear all map objects">Clear</button>
           <button id="zoomOutBtn" class="icon-btn" title="Zoom out">−</button>
           <span id="zoomLabel">100%</span>
           <button id="zoomInBtn" class="icon-btn" title="Zoom in">+</button>
@@ -109,6 +112,10 @@
                width="2400" height="1600" viewBox="0 0 2400 1600"
                aria-label="Blank map canvas">
             <defs>
+              <pattern id="oceanWavePattern" width="88" height="65" patternUnits="userSpaceOnUse">
+                <rect width="88" height="65" fill="#78a9c9"/>
+                <path d="M-22 18 q22 -18 44 0 t44 0 t44 0 M-22 50 q22 -18 44 0 t44 0 t44 0" fill="none" stroke="#d7f0f5" stroke-width="3" opacity=".65" class="water-wave"/>
+              </pattern>
               <pattern id="gridPattern" width="40" height="40"
                        patternUnits="userSpaceOnUse">
                 <path d="M40 0H0V40" fill="none"
@@ -275,7 +282,20 @@
     <textarea id="suggestionText" rows="5" maxlength="3000" placeholder="I would love to see..." required></textarea>
     <div class="dialog-actions"><button type="button" class="btn" data-close="suggestionsDialog">Cancel</button><button type="submit" class="btn btn-primary">Prepare suggestion</button></div>
   </form>
-  <p class="suggestion-note">This prepares a message in your email app; it does not send anything automatically.</p>
+  <p class="suggestion-note">Suggestions are sent directly to the Atlas creator by email. The first submission requires a one-time email activation.</p>
+</dialog>
+
+
+<dialog id="drawingModeDialog" class="app-dialog mode-dialog">
+  <div class="dialog-heading">
+    <div><div class="eyebrow">CARTOGRAPHY METHOD</div><h2 id="drawingModeTitle">How would you like to draw?</h2></div>
+    <button type="button" class="icon-btn" data-close="drawingModeDialog">×</button>
+  </div>
+  <p>Choose how to create this feature. You can change the method each time you select a drawing tool.</p>
+  <div class="mode-choice-grid">
+    <button type="button" class="mode-choice" data-draw-mode="manual"><span class="mode-choice-icon">〰</span><strong>Manually</strong><small>Hold the mouse button and drag to sketch freely.</small></button>
+    <button type="button" class="mode-choice" data-draw-mode="points"><span class="mode-choice-icon">⌖</span><strong>Point by point</strong><small>Click to place each point, then double-click to finish.</small></button>
+  </div>
 </dialog>
 
 <dialog id="aboutDialog" class="app-dialog about-dialog">
