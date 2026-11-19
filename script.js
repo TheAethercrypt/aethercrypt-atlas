@@ -8,7 +8,7 @@ const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 3;
 
 const state = {
-  projectName: "Untitled World",
+  projectName: "The Aethercrypt: Atlas",
   width: 2400,
   height: 1600,
   zoom: 1,
@@ -70,7 +70,7 @@ function snapshot() {
 }
 
 function restore(data) {
-  state.projectName = data.projectName || "Untitled World";
+  state.projectName = (!data.projectName || data.projectName === "Untitled World") ? "The Aethercrypt: Atlas" : data.projectName;
   state.width = clamp(Number(data.width) || 2400, 200, 12000);
   state.height = clamp(Number(data.height) || 1600, 200, 12000);
   state.zoom = clamp(Number(data.zoom) || 1, MIN_ZOOM, MAX_ZOOM);
@@ -213,8 +213,10 @@ function renderAll() {
 }
 
 function updateProjectName() {
-  $("projectName").textContent = state.projectName;
-  document.title = `${state.projectName} — The Aethercrypt: Atlas`;
+  const displayName = state.projectName === "Untitled World" ? "The Aethercrypt: Atlas" : state.projectName;
+  $("projectName").textContent = displayName;
+  // Keep the public page title stable for search engines; map names belong to the editor, not the website identity.
+  document.title = "The Aethercrypt: Atlas";
 }
 
 function createSvgObject(obj) {
@@ -1114,7 +1116,7 @@ $("fileInput").addEventListener("change", async event => {
 $("newBtn").addEventListener("click", () => {
   if (!confirm("Create a new atlas? Save your current project first if needed.")) return;
 
-  state.projectName = "Untitled World";
+  state.projectName = "The Aethercrypt: Atlas";
   state.width = 2400;
   state.height = 1600;
   state.zoom = 1;

@@ -278,3 +278,57 @@ textarea:focus-visible, select.form-control:focus-visible { outline: 2px solid v
 
 .clear-btn { color: #e7a3ad; border-color: #70414d; }
 .clear-btn:hover { background: #44232d; color: #ffe1e5; }
+
+/* Responsive layout: phones and small tablets */
+@media (max-width: 760px) {
+  html, body { width: 100%; min-height: 100%; height: auto; overflow-x: hidden; overflow-y: auto; }
+  .app-shell { width: 100%; height: auto; min-height: 100dvh; overflow: visible; }
+  .topbar { position: relative; gap: 9px; padding: 10px max(10px, env(safe-area-inset-left)) 10px; }
+  .brand { min-width: 0; gap: 8px; }
+  .brand-mark { width: 34px; height: 34px; font-size: 20px; }
+  .brand-copy { min-width: 0; white-space: normal; }
+  .brand-copy strong { font-size: 11px; letter-spacing: .8px; }
+  .brand-copy small { font-size: 8px; letter-spacing: 1px; }
+  .project-name { flex: 1 1 100%; max-width: none; min-height: 34px; font-size: 13px; }
+  .top-actions { display: flex; flex: 1 1 100%; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 0 5px; scrollbar-width: thin; }
+  .top-actions .btn { flex: 0 0 auto; min-height: 36px; white-space: nowrap; }
+  .main-layout { display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: visible; }
+  .workspace { order: 1; display: flex; flex-direction: column; width: 100%; min-width: 0; height: min(62dvh, 560px); min-height: 360px; }
+  .workspace-top { flex-wrap: wrap; gap: 6px; padding: 7px; }
+  .breadcrumbs { min-width: 0; max-width: 100%; overflow-x: auto; }
+  .view-controls { display: flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; gap: 5px; }
+  .view-controls .icon-btn { flex: 0 0 auto; min-width: 34px; padding: 6px 9px; }
+  .canvas-viewport { flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; overflow: auto; -webkit-overflow-scrolling: touch; }
+  .canvas-stage { min-width: max-content; min-height: max-content; padding: 12px; }
+  #mapCanvas { max-width: none; touch-action: none; }
+  .workspace-footer { flex-wrap: wrap; min-height: 27px; font-size: 9px; }
+  .workspace-footer span:last-child { display: none; }
+  .tool-sidebar { order: 2; display: flex; flex-direction: row; align-items: flex-start; gap: 12px; width: 100%; min-width: 0; max-height: 235px; overflow-x: auto; overflow-y: hidden; padding: 10px; border-right: 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); -webkit-overflow-scrolling: touch; }
+  .sidebar-heading { display: none; }
+  .tool-group { display: flex; flex: 0 0 auto; flex-direction: column; align-items: stretch; min-width: max-content; margin: 0; }
+  .group-label { margin: 0 0 6px; }
+  .tool-btn { min-width: 142px; min-height: 36px; margin: 2px 0; text-align: left; }
+  .tool-options-panel { flex: 0 0 205px; min-width: 205px; max-height: 210px; overflow-y: auto; }
+  .tool-tip { flex: 0 0 190px; max-width: 190px; align-self: center; }
+  .properties-sidebar { order: 3; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); align-items: start; gap: 8px; width: 100%; min-width: 0; max-height: none; overflow: visible; padding: 10px; border-top: 1px solid var(--border); }
+  .panel { min-width: 0; margin: 0; }
+  .workspace-footer { padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+  .app-dialog { width: min(500px, calc(100vw - 20px)); max-width: calc(100vw - 20px); max-height: 88dvh; padding: 17px; }
+}
+@media (max-width: 420px) {
+  .topbar { padding-left: 8px; padding-right: 8px; }
+  .brand-copy strong { font-size: 10px; }
+  .brand-copy small { font-size: 7px; }
+  .workspace { height: 58dvh; min-height: 320px; }
+  .workspace-top { align-items: flex-start; }
+  .view-controls .icon-btn { min-height: 32px; min-width: 31px; padding: 5px 7px; font-size: 11px; }
+  .tool-sidebar { max-height: 220px; padding: 8px; }
+  .properties-sidebar { grid-template-columns: 1fr; padding: 8px; }
+  .form-grid, .submap-create-form { grid-template-columns: 1fr; }
+  .dialog-actions { justify-content: stretch; }
+  .dialog-actions .btn { flex: 1 1 auto; }
+}
+@media (max-width: 760px) and (orientation: landscape) {
+  .workspace { height: 72dvh; min-height: 280px; }
+  .tool-sidebar { max-height: 190px; }
+}
