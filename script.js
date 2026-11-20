@@ -125,8 +125,8 @@ const toolHelp = {
   image: "Click the map to place the imported image.",
   select: "Select an object, edit its properties or link a region to a submap.",
   pan: "Drag to move around the canvas. You can also use the middle mouse button.",
-  land: "Click to add polygon points. Double-click or right-click to finish.",
-  freehand: "Hold the mouse button and draw a continent or coastline by hand.",
+  land: "Create land. Choose manual drawing or point-by-point in the popup.",
+  freehand: "Create land. Choose manual drawing or point-by-point in the popup.",
   water: "Click to add points. Double-click or right-click to finish.",
   line: "Click the start point, then click the endpoint.",
   eraser: "Click an object to erase it.",
@@ -1188,34 +1188,36 @@ $("exportBtn").addEventListener("click", () => {
 $("suggestionsBtn").addEventListener("click", () => $("suggestionsDialog").showModal());
 $("suggestionForm").addEventListener("submit", async event => {
   event.preventDefault();
+  const form = $("suggestionForm");
   const category = $("suggestionType").value;
   const message = $("suggestionText").value.trim();
   if (!message) return;
-  const submitButton = $("suggestionForm").querySelector('button[type="submit"]');
+  const submitButton = form.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   submitButton.textContent = "Sending…";
   try {
+    // FormSubmit's AJAX endpoint expects form-encoded data (not JSON).
+    const payload = new FormData();
+    payload.append("name", "Aethercrypt Atlas community suggestion");
+    payload.append("_subject", `Aethercrypt Atlas — ${category}`);
+    payload.append("_template", "table");
+    payload.append("_captcha", "false");
+    payload.append("category", category);
+    payload.append("message", message);
+    payload.append("source", "The Aethercrypt: Atlas");
     const response = await fetch("https://formsubmit.co/ajax/jackiethearticwolf@gmail.com", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({
-        name: "Aethercrypt Atlas community suggestion",
-        _subject: `Aethercrypt Atlas — ${category}`,
-        category,
-        message,
-        source: "The Aethercrypt: Atlas"
-      })
+      method: "POST", headers: { "Accept": "application/json" }, body: payload
     });
-    const result = await response.json();
-    if (String(result.success) !== "true") {
-      throw new Error(result.message || "The form service could not accept the suggestion.");
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.success === false || result.success === "false") {
+      throw new Error(result.message || `Email service returned ${response.status}.`);
     }
-    showToast("Suggestion sent! Thank you for helping improve Atlas.");
+    showToast("Suggestion accepted by the email service. Check your inbox/spam folder.");
     $("suggestionText").value = "";
     $("suggestionsDialog").close();
   } catch (error) {
     console.error("Suggestion delivery failed:", error);
-    showToast(`Could not send suggestion: ${error.message || "check your connection"}.`);
+    showToast(`Suggestion not sent: ${error.message || "check your connection"}.`);
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = "Send suggestion";
@@ -1598,7 +1600,7 @@ if (fontSelect && ![...fontSelect.options].some(o => o.text === "Cinzel")) {
 }
 const fontLink = document.createElement("link");
 fontLink.rel = "stylesheet";
-fontLink.href = "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:wght@400;600;700&family=IM+Fell+English&family=Uncial+Antiqua&display=swap";
+fontLink.href = "https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@400;700&family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700&family=Cormorant+Garamond:wght@400;600;700&family=IM+Fell+English&family=MedievalSharp&family=Pirata+One&family=Uncial+Antiqua&family=UnifrakturMaguntia&display=swap";
 document.head.appendChild(fontLink);
 
 function svgEl(tag, attrs={}) { const el=document.createElementNS(NS,tag); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); return el; }
@@ -1682,6 +1684,16 @@ renderLayers=function(){
 function moveLayer(index,delta){const next=index+delta;if(next<0||next>=state.layers.length)return;[state.layers[index],state.layers[next]]=[state.layers[next],state.layers[index]];renderAll();saveHistory();storeCurrentMap();}
 $("layerUpBtn")?.addEventListener("click",()=>{const i=state.layers.findIndex(l=>l.id===state.activeLayerId);moveLayer(i,-1);});
 $("layerDownBtn")?.addEventListener("click",()=>{const i=state.layers.findIndex(l=>l.id===state.activeLayerId);moveLayer(i,1);});
+$("layerList")?.addEventListener("click",()=>setTimeout(applyLayerOpacity,0));
+// Layer opacity is independent for every layer and is applied to its SVG group.
+function applyLayerOpacity(){const layer=state.layers.find(l=>l.id===state.activeLayerId);if(!layer)return;const value=Math.round((layer.opacity??1)*100);if($("layerOpacity")){$("layerOpacity").value=value;$("layerOpacityLabel").textContent=value;}}
+const renderObjectsWithOpacity=renderObjects;
+renderObjects=function(){renderObjectsWithOpacity();objectGroup.querySelectorAll(":scope > g[data-layer-id]").forEach(group=>{const layer=state.layers.find(l=>l.id===group.dataset.layerId);group.setAttribute("opacity",layer?.opacity??1);});};
+$("layerOpacity")?.addEventListener("input",e=>{const layer=state.layers.find(l=>l.id===state.activeLayerId);if(!layer)return;layer.opacity=Number(e.target.value)/100;$("layerOpacityLabel").textContent=e.target.value;renderObjects();});
+$("layerOpacity")?.addEventListener("change",()=>{saveHistory();storeCurrentMap();});
+const renderAllWithLayerOpacity=renderAll;
+renderAll=function(){renderAllWithLayerOpacity();applyLayerOpacity();};
+
 
 // Layer groups are named collections; toggling a group toggles all its layers.
 $("layerGroupBtn")?.addEventListener("click",()=>{
@@ -2052,50 +2064,111 @@ if (privateNotesButton) {
 }
 
 
-/* ================================================================
-   ADDITIONS: image import, clear map, ocean waves and river fix.
-   ================================================================ */
+/* IMAGE IMPORT + IMAGE WORKSHOP */
 let pendingAtlasImage = null;
 $("addImageBtn")?.addEventListener("click", () => $("imageFileInput").click());
 $("imageFileInput")?.addEventListener("change", event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+  const file = event.target.files?.[0]; if (!file) return;
   if (!file.type.startsWith("image/")) { showToast("Choose an image file."); event.target.value=""; return; }
   if (file.size > 12 * 1024 * 1024) { showToast("Please choose an image smaller than 12 MB."); event.target.value=""; return; }
   const reader = new FileReader();
-  reader.onload = () => {
-    pendingAtlasImage = String(reader.result);
-    setTool("image");
-    showToast("Image ready. Click on the map where you want to place it.");
-  };
-  reader.onerror = () => showToast("The image could not be read.");
-  reader.readAsDataURL(file);
-  event.target.value = "";
+  reader.onload = () => { pendingAtlasImage=String(reader.result); setTool("image"); showToast("Image ready. Click the map to place it."); };
+  reader.onerror = () => showToast("The image could not be read."); reader.readAsDataURL(file); event.target.value="";
 });
-
 const previousAtlasClickWithImages = handleCanvasClick;
 handleCanvasClick = function(event) {
   if (state.tool === "image" && pendingAtlasImage) {
-    const point = pointFromEvent(event);
-    const img = new Image();
-    const data = pendingAtlasImage;
-    img.onload = () => {
-      const maxWidth = 520, maxHeight = 360;
-      const scale = Math.min(1, maxWidth / img.naturalWidth, maxHeight / img.naturalHeight);
-      const width = Math.max(40, img.naturalWidth * scale);
-      const height = Math.max(40, img.naturalHeight * scale);
-      addAtlasObject({ type:"image", href:data, x:point.x-width/2, y:point.y-height/2, width, height, name:"Imported image" });
-      pendingAtlasImage = null;
-      setTool("select");
-      showToast("Image added to the map. Select it to move it.");
-    };
-    img.onerror = () => { pendingAtlasImage=null; showToast("Could not load that image."); };
-    img.src = data;
-    return;
+    const point=pointFromEvent(event), data=pendingAtlasImage, img=new Image();
+    img.onload=()=>{const maxWidth=520,maxHeight=360,scale=Math.min(1,maxWidth/img.naturalWidth,maxHeight/img.naturalHeight),width=Math.max(40,img.naturalWidth*scale),height=Math.max(40,img.naturalHeight*scale);addAtlasObject({type:"image",href:data,x:point.x-width/2,y:point.y-height/2,width,height,naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,opacity:1,crop:{x:0,y:0,width:1,height:1},name:"Imported image"});pendingAtlasImage=null;setTool("select");showToast("Image added. Select it to edit, crop or resize it.");};
+    img.onerror=()=>{pendingAtlasImage=null;showToast("Could not load that image.");};img.src=data;return;
   }
   previousAtlasClickWithImages(event);
 };
 
+// Render imported images through a clip-path so crop edits are non-destructive.
+const renderImageBase = createSvgObject;
+createSvgObject = function(obj) {
+  if (obj?.type !== "image") return renderImageBase(obj);
+  const crop=obj.crop||{x:0,y:0,width:1,height:1};
+  const cx=clamp(Number(crop.x)||0,0,.99), cy=clamp(Number(crop.y)||0,0,.99);
+  const cw=clamp(Number(crop.width)||1,.01,1-cx), ch=clamp(Number(crop.height)||1,.01,1-cy);
+  const clipId=`clip-${obj.id}`;
+  const group=svgEl("g",{}), defs=svgEl("defs",{}), clip=svgEl("clipPath",{id:clipId});
+  clip.append(svgEl("rect",{x:obj.x,y:obj.y,width:obj.width,height:obj.height}));defs.append(clip);group.append(defs);
+  const image=svgEl("image",{x:obj.x-cx*obj.width/cw,y:obj.y-cy*obj.height/ch,width:obj.width/cw,height:obj.height/ch,href:obj.href,preserveAspectRatio:"none",opacity:obj.opacity??1,"clip-path":`url(#${clipId})`});
+  // Clip the displayed crop viewport with a nested group; the image remains fully editable.
+  const viewportGroup=svgEl("g",{"clip-path":`url(#${clipId})`});viewportGroup.append(image);group.append(viewportGroup);
+  return group;
+};
+
+// Add image-specific controls only while an image is selected.
+const renderPropertiesBeforeImageTools=renderProperties;
+renderProperties=function(){
+  renderPropertiesBeforeImageTools();
+  const obj=selectedObject(), panel=$("imageProperties");
+  if(!panel)return;
+  panel.hidden=obj?.type!=="image";
+  if(obj?.type==="image"){
+    $("imageOpacity").value=Math.round((obj.opacity??1)*100);$("imageOpacityLabel").textContent=$("imageOpacity").value;
+    $("imageWidth").value=Math.round(obj.width);$("imageHeight").value=Math.round(obj.height);
+  }
+};
+$("imageOpacity")?.addEventListener("input",e=>{const o=selectedObject();if(o?.type!=="image")return;o.opacity=Number(e.target.value)/100;$("imageOpacityLabel").textContent=e.target.value;renderObjects();});
+$("imageOpacity")?.addEventListener("change",()=>{saveHistory();storeCurrentMap();});
+$("applyImageSizeBtn")?.addEventListener("click",()=>{const o=selectedObject();if(o?.type!=="image")return;o.width=clamp(Number($("imageWidth").value)||o.width,10,12000);o.height=clamp(Number($("imageHeight").value)||o.height,10,12000);renderAll();saveHistory();storeCurrentMap();showToast("Image dimensions updated.");});
+$("resetImageCropBtn")?.addEventListener("click",()=>{const o=selectedObject();if(o?.type!=="image")return;o.crop={x:0,y:0,width:1,height:1};renderAll();saveHistory();storeCurrentMap();showToast("Original image framing restored.");});
+$("fitImageCanvasBtn")?.addEventListener("click",()=>{const o=selectedObject();if(o?.type!=="image")return;const ratio=Math.min(state.width/(o.naturalWidth||o.width),state.height/(o.naturalHeight||o.height));o.width=(o.naturalWidth||o.width)*ratio;o.height=(o.naturalHeight||o.height)*ratio;o.x=(state.width-o.width)/2;o.y=(state.height-o.height)/2;o.crop={x:0,y:0,width:1,height:1};renderAll();saveHistory();storeCurrentMap();showToast("Image fitted to canvas. Use Undo to reverse this change.");});
+
+// LibreOffice-style crop frame: resize the crop viewport with edge/corner handles, then Apply.
+let cropDraft=null,cropDrag=null;
+function drawCropFrame(){
+  overlay.replaceChildren();
+  const o=selectedObject(); if(!o||o.type!=="image"||!cropDraft)return;
+  const r=cropDraft, shade=svgEl("rect",{x:o.x,y:o.y,width:o.width,height:o.height,fill:"#100b14","fill-opacity":.32,"pointer-events":"none"});
+  const frame=svgEl("rect",{x:r.x,y:r.y,width:r.w,height:r.h,fill:"#d7b5ff","fill-opacity":.08,stroke:"#fff4d6","stroke-width":2,"stroke-dasharray":"7 4","pointer-events":"none"});
+  overlay.append(shade,frame);
+  const pts=[ ["nw",r.x,r.y],["n",r.x+r.w/2,r.y],["ne",r.x+r.w,r.y],["e",r.x+r.w,r.y+r.h/2],["se",r.x+r.w,r.y+r.h],["s",r.x+r.w/2,r.y+r.h],["sw",r.x,r.y+r.h],["w",r.x,r.y+r.h/2] ];
+  pts.forEach(([id,x,y])=>overlay.append(svgEl("rect",{x:x-7,y:y-7,width:14,height:14,rx:2,fill:"#fff4d6",stroke:"#765087","stroke-width":2,"data-crop-handle":id,"pointer-events":"all"})));
+}
+function beginImageCrop(){
+  const o=selectedObject(); if(o?.type!=="image")return;
+  cropDraft={x:o.x,y:o.y,w:o.width,h:o.height};
+  $("cropActions").hidden=false;setTool("imageCrop");drawCropFrame();
+  showToast("Drag the crop handles like a document editor, then choose Apply crop.");
+}
+function finishImageCrop(apply){
+  const o=selectedObject();
+  if(apply&&o?.type==="image"&&cropDraft){
+    const r=cropDraft, prev=o.crop||{x:0,y:0,width:1,height:1};
+    const nx=(r.x-o.x)/o.width,ny=(r.y-o.y)/o.height,nw=r.w/o.width,nh=r.h/o.height;
+    if(nw>.01&&nh>.01)o.crop={x:prev.x+nx*prev.width,y:prev.y+ny*prev.height,width:nw*prev.width,height:nh*prev.height};
+    else {showToast("Crop area is too small.");return;}
+    renderAll();saveHistory();storeCurrentMap();showToast("Image crop applied.");
+  }
+  cropDraft=null;cropDrag=null;overlay.replaceChildren();$("cropActions").hidden=true;setTool("select");
+}
+$("cropImageBtn")?.addEventListener("click",beginImageCrop);
+$("applyImageCropBtn")?.addEventListener("click",()=>finishImageCrop(true));
+$("cancelImageCropBtn")?.addEventListener("click",()=>finishImageCrop(false));
+canvas.addEventListener("pointerdown",e=>{
+  if(state.tool!=="imageCrop"||!cropDraft||e.button!==0)return;
+  const handle=e.target?.getAttribute?.("data-crop-handle"); if(!handle)return;
+  e.preventDefault();cropDrag={handle,start:pointFromEvent(e),initial:{...cropDraft}};canvas.setPointerCapture?.(e.pointerId);
+});
+canvas.addEventListener("pointermove",e=>{
+  if(state.tool!=="imageCrop"||!cropDrag)return;
+  const p=pointFromEvent(e),d=cropDrag.initial,dx=p.x-cropDrag.start.x,dy=p.y-cropDrag.start.y,h=cropDrag.handle;
+  let left=d.x,top=d.y,right=d.x+d.w,bottom=d.y+d.h;
+  if(h.includes("w"))left=clamp(d.x+dx,d.x- d.w+12,d.x+d.w-12);
+  if(h.includes("e"))right=clamp(d.x+d.w+dx,d.x+12,d.x+d.w*2-12);
+  if(h.includes("n"))top=clamp(d.y+dy,d.y-d.h+12,d.y+d.h-12);
+  if(h.includes("s"))bottom=clamp(d.y+d.h+dy,d.y+12,d.y+d.h*2-12);
+  const o=selectedObject();if(!o)return;
+  left=clamp(left,o.x,o.x+o.width-12);right=clamp(right,o.x+12,o.x+o.width);top=clamp(top,o.y,o.y+o.height-12);bottom=clamp(bottom,o.y+12,o.y+o.height);
+  cropDraft={x:left,y:top,w:right-left,h:bottom-top};drawCropFrame();
+});
+canvas.addEventListener("pointerup",()=>{cropDrag=null;});
+canvas.addEventListener("pointercancel",()=>{cropDrag=null;});
 $("clearBtn")?.addEventListener("click", () => {
   if (!state.objects.length) { showToast("The map is already clear."); return; }
   if (!confirm("Clear every object from this map? This can be undone with Undo.")) return;
@@ -2108,3 +2181,81 @@ $("clearBtn")?.addEventListener("click", () => {
   storeCurrentMap();
   showToast("Map cleared. Use Undo to restore it.");
 });
+
+
+// Compact community popup and tiny built-in mini-game.
+let relicIndex=Math.floor(Math.random()*6),relicAttempts=3,relicDone=false;
+function resetRelicGame(){relicIndex=Math.floor(Math.random()*6);relicAttempts=3;relicDone=false;document.querySelectorAll("[data-vault]").forEach(b=>{b.disabled=false;b.textContent="?";b.classList.remove("vault-found","vault-empty");});$("relicGameStatus").textContent="Choose a vault to begin. Three attempts remain.";}
+$("relicGameGrid")?.addEventListener("click",e=>{const b=e.target.closest("[data-vault]");if(!b||relicDone||b.disabled)return;const n=Number(b.dataset.vault);b.disabled=true;if(n===relicIndex){b.textContent="✦";b.classList.add("vault-found");relicDone=true;$("relicGameStatus").textContent="You found the relic! The Atlas remembers your name.";document.querySelectorAll("[data-vault]").forEach(x=>x.disabled=true);}else{b.textContent="·";b.classList.add("vault-empty");relicAttempts--;if(relicAttempts<=0){relicDone=true;document.querySelectorAll("[data-vault]").forEach((x,i)=>{x.disabled=true;if(i===relicIndex)x.textContent="✦";});$("relicGameStatus").textContent="The relic remains hidden no longer. Try again!";}else $("relicGameStatus").textContent=`Not this vault. ${relicAttempts} ${relicAttempts===1?"attempt":"attempts"} left.`;}});
+$("relicGameReset")?.addEventListener("click",resetRelicGame);
+
+// Cartographer's Echo: a growing sigil-memory game.
+let echoSequence=[],echoInput=[],echoRound=0,echoLocked=true,echoTimers=[];
+const echoButtons=[...document.querySelectorAll("[data-sigil]")];
+function clearEchoTimers(){echoTimers.forEach(clearTimeout);echoTimers=[];}
+function echoStatus(message){const el=$("echoStatus");if(el)el.textContent=message;}
+function flashSigil(index){const button=echoButtons[index];if(!button)return;button.classList.add("sigil-lit");const timer=setTimeout(()=>button.classList.remove("sigil-lit"),430);echoTimers.push(timer);}
+function playEchoSequence(){echoLocked=true;echoInput=[];echoStatus(`Round ${echoRound}: watch the sigils…`);echoSequence.forEach((sigil,i)=>{const timer=setTimeout(()=>flashSigil(sigil),650+i*760);echoTimers.push(timer);});const done=setTimeout(()=>{echoLocked=false;echoStatus(`Your turn · repeat ${echoSequence.length} sigils in order.`);},650+echoSequence.length*760);echoTimers.push(done);}
+function startEcho(){clearEchoTimers();echoSequence=[];echoInput=[];echoRound=0;echoLocked=true;nextEchoRound();}
+function nextEchoRound(){echoRound++;echoSequence.push(Math.floor(Math.random()*4));playEchoSequence();}
+$("echoStart")?.addEventListener("click",startEcho);
+$("echoBoard")?.addEventListener("click",e=>{const button=e.target.closest("[data-sigil]");if(!button||echoLocked)return;const picked=Number(button.dataset.sigil);flashSigil(picked);const position=echoInput.length;if(picked!==echoSequence[position]){echoLocked=true;echoStatus(`The echo broke at round ${echoRound}. You reached ${Math.max(0,echoRound-1)} rounds. Try again?`);$("echoStart").textContent="Try again";return;}echoInput.push(picked);if(echoInput.length===echoSequence.length){echoLocked=true;if(echoRound>=12){echoStatus("Twelve rounds! The map recognises its master. ✦");$("echoStart").textContent="Play again";}else{echoStatus("Perfect. The map reveals another sigil…");const timer=setTimeout(nextEchoRound,850);echoTimers.push(timer);}}});
+function openGame(game){$("extrasDialog")?.close();$("miniGameDialog")?.showModal();["relic","echo","trial","observatory"].forEach(id=>{const panel=$(id+"GamePanel");if(panel)panel.hidden=id!==game;});$("gameDialogTitle").textContent=game==="echo"?"Cartographer's Echo":game==="trial"?"The Cartographer's Trial":game==="observatory"?"The Hollow Observatory":"Find the Lost Relic";if(game==="relic")resetRelicGame();else if(game==="echo"){$("echoStart").textContent="Begin Echo";echoStatus("Press Begin Echo to start.");}else if(game==="trial")resetTrial();else if(game==="observatory")resetObservatory();}
+document.querySelectorAll("[data-launch-game]").forEach(button=>button.addEventListener("click",()=>openGame(button.dataset.launchGame)));
+$("gameLibraryBack")?.addEventListener("click",()=>{$("miniGameDialog")?.close();$("extrasDialog")?.showModal();$("gamesHubSection")?.scrollIntoView({block:"nearest",behavior:"smooth"});});
+$("sanctumTile")?.addEventListener("click",()=>$("sanctumDialog")?.showModal());
+document.querySelectorAll("[data-soon]").forEach(button=>button.addEventListener("click",()=>{const title=button.dataset.soon||"This project";$("sanctumDialog").querySelector("h2").textContent=title;$("sanctumDialog").querySelector(".sanctum-notice h3").textContent="No link available";$("sanctumDialog").querySelector(".sanctum-notice p").textContent=`${title} is still taking shape. Its entrance will be revealed when it is ready.`;$("sanctumDialog")?.showModal();}));
+$("atlasBlockTile")?.addEventListener("click",()=>$("extrasDialog")?.close());
+
+// Each sidebar folds independently. The arrow remains as the only visible control.
+function setSidebarVisibility(id, visible) {
+  const el = $(id); if (!el) return;
+  el.classList.toggle("sidebar-is-hidden", !visible);
+  const button = el.querySelector("[data-collapse]");
+  if (button) {
+    button.textContent = id === "toolSidebar" ? (visible ? "‹" : "›") : (visible ? "›" : "‹");
+    button.setAttribute("aria-label", visible ? "Collapse menu" : "Expand menu");
+    button.setAttribute("aria-expanded", String(visible));
+    button.title = visible ? "Collapse menu" : "Expand menu";
+  }
+}
+document.querySelectorAll("[data-collapse]").forEach(button => {
+  button.type = "button";
+  button.addEventListener("click", event => {
+    event.preventDefault(); event.stopPropagation();
+    const sidebar = button.closest("#toolSidebar, #propertiesSidebar");
+    if (sidebar) setSidebarVisibility(sidebar.id, sidebar.classList.contains("sidebar-is-hidden"));
+  });
+});
+
+$("extrasBtn")?.addEventListener("click", () => $("extrasDialog").showModal());
+$("miniGameBtn")?.addEventListener("click", () => { $("extrasDialog").showModal(); setTimeout(()=>$("gamesHubSection")?.scrollIntoView({block:"nearest",behavior:"smooth"}),80); });
+
+
+// The Cartographer's Trial — hard, turn-based labyrinth puzzle.
+const trialWalls = new Set([3,4,5,6,8,9,10,11,13,14,15,16,18,19,20,21]);
+let trialPosition = 0, trialFinished = false, trialVisited = new Set([0]);
+function renderTrial(){
+  const board=$("trialBoard"); if(!board)return; board.innerHTML="";
+  for(let i=0;i<25;i++){ const b=document.createElement("button"); b.type="button"; b.className="trial-cell"; b.dataset.cell=String(i);
+    if(trialWalls.has(i)){b.classList.add("trial-wall");b.textContent="▧";b.disabled=true;}
+    else if(i===trialPosition){b.classList.add("trial-player");b.textContent="✦";}
+    else if(i===24){b.classList.add("trial-goal");b.textContent="◇";}
+    else if(trialVisited.has(i)){b.classList.add("trial-path");b.textContent="·";}
+    else b.textContent=""; board.appendChild(b); }
+}
+function resetTrial(){trialPosition=0;trialFinished=false;trialVisited=new Set([0]);const status=$("trialStatus");if(status)status.textContent="Find the path to the relic. Move only to adjacent tiles.";renderTrial();}
+$("trialBoard")?.addEventListener("click",e=>{const b=e.target.closest("[data-cell]");if(!b||trialFinished)return;const next=Number(b.dataset.cell),r=Math.floor(trialPosition/5),c=trialPosition%5,nr=Math.floor(next/5),nc=next%5;if(Math.abs(r-nr)+Math.abs(c-nc)!==1)return;if(trialWalls.has(next)||trialVisited.has(next)){trialFinished=true;$("trialStatus").textContent="The labyrinth sealed your path. The trial resets—try a different route.";return;}trialPosition=next;trialVisited.add(next);if(next===24){trialFinished=true;$("trialStatus").textContent=`Relic secured in ${trialVisited.size-1} moves. You conquered the hard trial! ✦`;}renderTrial();});
+$("trialReset")?.addEventListener("click",resetTrial);
+
+
+// The Hollow Observatory: trace constellations by selecting stars in sequence.
+const observatoryPatterns=[[2,6,10,14],[1,5,9,13,17],[0,4,8,12,16,20]];
+let observatoryStage=0,observatoryExpected=[],observatoryInput=[],observatoryLocked=true,observatoryTimers=[];
+function observatoryStatus(message){const el=$("observatoryStatus");if(el)el.textContent=message;}
+function clearObservatoryTimers(){observatoryTimers.forEach(clearTimeout);observatoryTimers=[];}
+function renderObservatory(){const board=$("observatoryBoard");if(!board)return;board.innerHTML="";for(let i=0;i<25;i++){const b=document.createElement("button");b.type="button";b.className="observatory-star";b.dataset.star=String(i);b.textContent="✦";b.setAttribute("aria-label",`Star ${i+1}`);board.appendChild(b);}}
+function resetObservatory(){clearObservatoryTimers();observatoryStage=0;observatoryExpected=[];observatoryInput=[];observatoryLocked=true;renderObservatory();observatoryStatus("Begin the observation to reveal the first constellation.");$("observatoryStart").textContent="Begin observation";}
+function revealObservatory(){observatoryLocked=true;observatoryInput=[];observatoryExpected=observatoryPatterns[observatoryStage];observatoryStatus(`Constellation ${observatoryStage+1}: memorise the ${observatoryExpected.length} stars…`);observatoryExpected.forEach((star,i)=>{const t=setTimeout(()=>{const b=$("observatoryBoard")?.querySelector(`[data-star="${star}"]`);b?.classList.add("star-lit");setTimeout(()=>b?.classList.remove("star-lit"),480);},650+i*720);observatoryTimers.push(t);});const done=setTimeout(()=>{observatoryLocked=false;observatoryStatus("Your turn: trace the constellation in the same order.");},650+observatoryExpected.length*720);observatoryTimers.push(done);}
+$("observatoryStart")?.addEventListener("click",()=>{if(observatoryStage>=3||observatoryExpected.length===0){observatoryStage=0;renderObservatory();}revealObservatory();$("observatoryStart").textContent="Restart observation";});
+$("observatoryBoard")?.addEventListener("click",e=>{const b=e.target.closest("[data-star]");if(!b||observatoryLocked)return;const picked=Number(b.dataset.star),pos=observatoryInput.length;b.classList.add("star-picked");if(picked!==observatoryExpected[pos]){observatoryLocked=true;observatoryStatus(`The constellation faded. You reached stage ${observatoryStage+1}. Try again.`);$("observatoryStart").textContent="Try again";observatoryStage=0;return;}observatoryInput.push(picked);if(observatoryInput.length===observatoryExpected.length){observatoryLocked=true;observatoryStage++;if(observatoryStage===3){observatoryStatus("All three constellations restored. The observatory shines again. ✦");$("observatoryStart").textContent="Play again";observatoryExpected=[];}else{observatoryStatus("Constellation restored. Preparing the next sky…");const t=setTimeout(revealObservatory,900);observatoryTimers.push(t);}}});

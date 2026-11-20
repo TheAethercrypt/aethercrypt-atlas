@@ -63,14 +63,16 @@
       <button class="btn" id="suggestionsBtn">Suggestions</button>
       <button class="btn" id="tutorialBtn">Tutorial</button>
       <button class="btn" id="aboutBtn">About</button>
+      <button class="btn utility-trigger" id="extrasBtn" type="button" aria-label="Aethercrypt links" title="Aethercrypt links">✦</button>
+      <button class="btn utility-trigger game-trigger" id="miniGameBtn" type="button" aria-label="Mini game" title="Mini game">♜</button>
       <button class="btn btn-primary" id="exportBtn">Export PNG</button>
       <input id="fileInput" type="file" accept=".json,application/json" hidden>
     </nav>
   </header>
 
   <main class="main-layout">
-    <aside class="tool-sidebar">
-      <div class="sidebar-heading">TOOLS</div>
+    <aside class="tool-sidebar" id="toolSidebar">
+      <div class="sidebar-heading"><span>TOOLS</span><button class="sidebar-collapse" type="button" data-collapse="toolSidebar" aria-label="Hide tools">−</button></div>
 
       <div class="tool-group">
         <div class="group-label">NAVIGATION</div>
@@ -80,8 +82,7 @@
 
       <div class="tool-group">
         <div class="group-label">DRAWING</div>
-        <button class="tool-btn" data-tool="land"><span class="tool-icon">◇</span>Land polygon</button>
-        <button class="tool-btn" data-tool="freehand"><span class="tool-icon">〰</span>Freehand land</button>
+        <button class="tool-btn" data-tool="land"><span class="tool-icon">◇</span>Land</button>
         <button class="tool-btn" data-tool="water"><span class="tool-icon">≈</span>Water</button>
         <button class="tool-btn" data-tool="lake"><span class="tool-icon">◉</span>Lake</button>
         <button class="tool-btn" data-tool="river"><span class="tool-icon">⌁</span>River</button>
@@ -166,9 +167,9 @@
       </footer>
     </section>
 
-    <aside class="properties-sidebar">
+    <aside class="properties-sidebar" id="propertiesSidebar">
       <section class="panel">
-        <div class="panel-title">PROPERTIES</div>
+        <div class="panel-title"><span>PROPERTIES</span><button class="sidebar-collapse" type="button" data-collapse="propertiesSidebar" aria-label="Hide properties">−</button></div>
         <p id="selectionMessage">Select an object to edit its properties.</p>
 
         <div id="objectProperties" hidden>
@@ -190,6 +191,11 @@
               <option value="'Times New Roman', serif">Times New Roman</option>
               <option value="'Courier New', monospace">Courier New</option>
               <option value="cursive">Cursive</option>
+              <option value="'Cinzel Decorative', serif">Cinzel Decorative</option>
+              <option value="'MedievalSharp', cursive">MedievalSharp</option>
+              <option value="'Pirata One', cursive">Pirata One</option>
+              <option value="'UnifrakturMaguntia', cursive">UnifrakturMaguntia</option>
+              <option value="'Alegreya SC', serif">Alegreya SC</option>
             </select>
             <label for="textSpacing">Letter spacing</label>
             <input id="textSpacing" type="range" min="-2" max="20" step="0.5" value="0">
@@ -201,6 +207,20 @@
             </div>
           </div>
 
+          <div id="imageProperties" class="image-properties" hidden>
+            <div class="feature-divider"></div>
+            <div class="panel-title">IMAGE EDITOR</div>
+            <label for="imageOpacity">Image opacity</label>
+            <input id="imageOpacity" type="range" min="0" max="100" value="100">
+            <div class="range-value"><span id="imageOpacityLabel">100</span>%</div>
+            <label for="imageWidth">Width (px)</label><input id="imageWidth" type="number" min="10" max="12000" step="10">
+            <label for="imageHeight">Height (px)</label><input id="imageHeight" type="number" min="10" max="12000" step="10">
+            <button id="applyImageSizeBtn" class="btn full-width">Apply image size</button>
+            <button id="cropImageBtn" class="btn full-width">✂ Crop image</button>
+            <div id="cropActions" hidden><button id="applyImageCropBtn" class="btn btn-primary full-width">Apply crop</button><button id="cancelImageCropBtn" class="btn full-width">Cancel crop</button></div>
+            <button id="resetImageCropBtn" class="btn full-width">Reset crop</button>
+            <button id="fitImageCanvasBtn" class="btn full-width">Fit image to canvas</button>
+          </div>
           <button id="createRegionSubmapBtn" class="btn full-width" hidden>
             Create submap from region
           </button>
@@ -255,6 +275,7 @@
         <div class="panel-title">LAYERS</div>
         <div id="layerList" class="layer-list"></div>
         <div class="layer-order-actions"><button id="layerUpBtn" class="btn">↑</button><button id="layerDownBtn" class="btn">↓</button><button id="renameLayerGroupBtn" class="btn">Group</button></div>
+        <label for="layerOpacity">Active layer opacity</label><input id="layerOpacity" type="range" min="0" max="100" value="100"><div class="range-value"><span id="layerOpacityLabel">100</span>%</div>
         <button id="addLayerBtn" class="btn full-width">+ Add layer</button>
       </section>
     </aside>
@@ -295,6 +316,43 @@
   <div id="submapList" class="submap-list"></div>
 </dialog>
 
+<dialog id="extrasDialog" class="app-dialog extras-dialog">
+  <div class="dialog-heading"><div><div class="eyebrow">THE AETHERCRYPT PORTAL</div><h2>Explore the crypt</h2><p class="hub-intro">Games, places and tools from the Aethercrypt universe.</p></div><button type="button" class="icon-btn" data-close="extrasDialog">×</button></div>
+  <section class="hub-section"><div class="hub-section-title">PAGES <span>PLACES TO VISIT</span></div><div class="hub-grid">
+    <a class="hub-tile" href="https://theaethercrypt.github.io/aethercrypt-website/" target="_blank" rel="noopener"><span class="hub-icon">✦</span><strong>Official Website</strong><small>Explore The Aethercrypt</small><b>AVAILABLE ↗</b></a>
+    <a class="hub-tile" href="https://discord.gg/UHHckz7VR5" target="_blank" rel="noopener"><span class="hub-icon">☾</span><strong>Discord Server</strong><small>Meet the community</small><b>AVAILABLE ↗</b></a>
+    <button class="hub-tile hub-soon" type="button" id="sanctumTile"><span class="hub-icon">◇</span><strong>Sanctum</strong><small>A shared social space</small><b>COMING SOON · DETAILS</b></button>
+  </div></section>
+  <section class="hub-section"><div class="hub-section-title">OTHER PROJECTS <span>EXPLORE MORE OF AETHERCRYPT</span></div><div class="hub-grid">
+    <button class="hub-tile hub-soon" type="button" data-soon="Aethercrypt Library"><span class="hub-icon">▤</span><strong>Library</strong><small>Worldbuilding resources</small><b>COMING SOON</b></button>
+    <button class="hub-tile hub-soon" type="button" data-soon="Aethercrypt Archive"><span class="hub-icon">⌑</span><strong>Archive</strong><small>Projects and creations</small><b>COMING SOON</b></button>
+  </div></section>
+  <section class="hub-section" id="gamesHubSection"><div class="hub-section-title">GAMES <span>TAKE A LITTLE BREAK</span></div><div class="hub-grid">
+    <button class="hub-tile" type="button" data-launch-game="relic"><span class="hub-icon">✧</span><strong>Find the Lost Relic</strong><small>Search the six sealed vaults</small><em class="game-difficulty">Difficulty: Easy</em><b>PLAY NOW →</b></button>
+    <button class="hub-tile" type="button" data-launch-game="echo"><span class="hub-icon">◈</span><strong>Cartographer's Echo</strong><small>Memorise a magical map sequence</small><em class="game-difficulty">Difficulty: Medium · Increasing</em><b>PLAY NOW →</b></button>
+    <button class="hub-tile" type="button" data-launch-game="trial"><span class="hub-icon">♜</span><strong>The Cartographer's Trial</strong><small>Navigate the sealed labyrinth</small><em class="game-difficulty">Difficulty: Hard</em><b>PLAY NOW →</b></button>
+    <button class="hub-tile" type="button" data-launch-game="observatory"><span class="hub-icon">☄</span><strong>The Hollow Observatory</strong><small>Rebuild constellations from scattered stars</small><em class="game-difficulty">Difficulty: Hard</em><b>PLAY NOW →</b></button>
+    <button class="hub-tile hub-soon" type="button" data-soon="The Veilkeeper's Riddle"><span class="hub-icon">☷</span><strong>The Veilkeeper's Riddle</strong><small>Decode an ancient cipher</small><em class="game-difficulty">Difficulty: Expert</em><b>COMING SOON</b></button>
+    <button class="hub-tile hub-soon" type="button" data-soon="Whispers in the Deep"><span class="hub-icon">≈</span><strong>Whispers in the Deep</strong><small>Explore a shifting underwater ruin</small><em class="game-difficulty">Difficulty: Medium</em><b>COMING SOON</b></button>
+    <button class="hub-tile hub-soon" type="button" data-soon="The Last Astronomer"><span class="hub-icon">✷</span><strong>The Last Astronomer</strong><small>Chart a forgotten sky</small><em class="game-difficulty">Difficulty: Unknown</em><b>COMING SOON</b></button>
+  </div></section>
+</dialog>
+
+<dialog id="sanctumDialog" class="app-dialog small-notice-dialog">
+  <div class="dialog-heading"><div><div class="eyebrow">THE AETHERCRYPT · SANCTUM</div><h2>A door not yet opened</h2></div><button type="button" class="icon-btn" data-close="sanctumDialog">×</button></div>
+  <div class="sanctum-notice"><span>◇</span><h3>No link available</h3><p>Sanctum is still taking shape. Its entrance will be revealed when the space is ready.</p><b>COMING SOON</b></div>
+  <div class="dialog-actions"><button type="button" class="btn" data-close="sanctumDialog">Understood</button></div>
+</dialog>
+
+<dialog id="miniGameDialog" class="app-dialog mini-game-dialog">
+  <div class="dialog-heading"><div><div class="eyebrow">THE AETHERCRYPT ARCADE</div><h2 id="gameDialogTitle">Find the Lost Relic</h2></div><button type="button" class="icon-btn" data-close="miniGameDialog">×</button></div>
+  <button type="button" class="text-back-btn" id="gameLibraryBack">← Back to games</button>
+  <section class="mini-game game-panel" id="relicGamePanel"><p>One of six sealed vaults hides an ancient relic. You have three attempts.</p><div id="relicGameGrid" class="relic-grid"><button type="button" data-vault="0">?</button><button type="button" data-vault="1">?</button><button type="button" data-vault="2">?</button><button type="button" data-vault="3">?</button><button type="button" data-vault="4">?</button><button type="button" data-vault="5">?</button></div><p id="relicGameStatus" class="game-status" aria-live="polite">Choose a vault to begin.</p><button type="button" class="btn" id="relicGameReset">Play again</button></section>
+  <section class="mini-game game-panel" id="echoGamePanel" hidden><p>The map will whisper a sequence of four sigils. Watch carefully, then repeat it in the same order. Each round adds one more sigil.</p><div class="echo-board" id="echoBoard"><button type="button" data-sigil="0">✦</button><button type="button" data-sigil="1">☾</button><button type="button" data-sigil="2">◇</button><button type="button" data-sigil="3">⌘</button></div><p class="game-status" id="echoStatus" aria-live="polite">Press Begin Echo to start.</p><div class="dialog-actions"><button type="button" class="btn btn-primary" id="echoStart">Begin Echo</button></div></section>
+  <section class="mini-game game-panel" id="observatoryGamePanel" hidden><p>Three constellations have been lost. Study the star map, then select the stars in the correct order to trace each constellation. Each stage is longer than the last.</p><div class="observatory-board" id="observatoryBoard" aria-label="Star map"></div><p class="game-status" id="observatoryStatus" aria-live="polite">Begin the observation to reveal the first constellation.</p><div class="dialog-actions"><button type="button" class="btn btn-primary" id="observatoryStart">Begin observation</button></div></section>
+  <section class="mini-game game-panel" id="trialGamePanel" hidden><p class="trial-instructions">Hard difficulty · Guide the cartographer from the entrance to the relic. Move one tile at a time, avoid sealed tiles, and do not step backwards. One wrong move resets the trial.</p><div id="trialBoard" class="trial-board" aria-label="Labyrinth grid"></div><p class="game-status" id="trialStatus" aria-live="polite">Find the path to the relic.</p><div class="dialog-actions"><button type="button" class="btn btn-primary" id="trialReset">Restart trial</button></div></section>
+</dialog>
+
 <dialog id="suggestionsDialog" class="app-dialog">
   <div class="dialog-heading">
     <div><div class="eyebrow">HELP SHAPE THE ATLAS</div><h2>Send a suggestion</h2></div>
@@ -308,7 +366,7 @@
     <textarea id="suggestionText" rows="5" maxlength="3000" placeholder="I would love to see..." required></textarea>
     <div class="dialog-actions"><button type="button" class="btn" data-close="suggestionsDialog">Cancel</button><button type="submit" class="btn btn-primary">Prepare suggestion</button></div>
   </form>
-  <p class="suggestion-note">Suggestions are sent directly to the Atlas creator by email. The first submission requires a one-time email activation.</p>
+  <p class="suggestion-note">Suggestions are submitted through FormSubmit to the creator. The first use may require a one-time activation of the recipient address; delivery depends on the email service and spam filters.</p>
 </dialog>
 
 
@@ -321,6 +379,15 @@
   <div class="mode-choice-grid">
     <button type="button" class="mode-choice" data-draw-mode="manual"><span class="mode-choice-icon">〰</span><strong>Manually</strong><small>Hold the mouse button and drag to sketch freely.</small></button>
     <button type="button" class="mode-choice" data-draw-mode="points"><span class="mode-choice-icon">⌖</span><strong>Point by point</strong><small>Click to place each point, then double-click to finish.</small></button>
+  </div>
+</dialog>
+
+<dialog id="cropModeDialog" class="app-dialog mode-dialog">
+  <div class="dialog-heading"><div><div class="eyebrow">IMAGE WORKSHOP</div><h2>How do you want to crop?</h2></div><button type="button" class="icon-btn" data-close="cropModeDialog">×</button></div>
+  <p>Choose a cropping method, then define the visible area of your image.</p>
+  <div class="mode-choice-grid">
+    <button type="button" class="mode-choice" data-crop-mode="manual"><span class="mode-choice-icon">▱</span><strong>Manually</strong><small>Drag a rectangle over the image to choose the crop.</small></button>
+    <button type="button" class="mode-choice" data-crop-mode="points"><span class="mode-choice-icon">⌖</span><strong>Point by point</strong><small>Click the top-left and bottom-right crop corners.</small></button>
   </div>
 </dialog>
 
