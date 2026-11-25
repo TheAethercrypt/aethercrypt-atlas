@@ -284,6 +284,31 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<dialog id="saveWarningDialog" class="app-dialog save-warning-dialog">
+  <div class="dialog-heading">
+    <div><div class="eyebrow">IMPORTANT · BETA NOTICE</div><h2>Protect your Atlas project</h2></div>
+    <button type="button" class="icon-btn" data-close="saveWarningDialog" aria-label="Close">×</button>
+  </div>
+  <div class="save-warning-banner"><span aria-hidden="true">⚠</span><strong>Your project is not stored on The Aethercrypt website.</strong></div>
+  <p><strong>The Aethercrypt: Atlas is currently a beta.</strong> It does not upload or store your project files on our website or on a cloud server. Your work exists in your current browser session until you download and keep your own project file.</p>
+  <p>Please save the <strong>.atlas.json</strong> file to your device. If you close the page, clear browser data, change devices, or lose the downloaded file, your project may not be recoverable.</p>
+  <p class="save-disclaimer">By using the beta, you acknowledge that The Aethercrypt and its creator are not responsible for project files lost, deleted, damaged, or otherwise made inaccessible. Keep independent backups of your work.</p>
+  <div class="save-tips">
+    <h3>✦ Tips to keep your file safe</h3>
+    <ul>
+      <li>Save the downloaded <strong>.atlas.json</strong> file in a folder you can easily find.</li>
+      <li>Keep a second copy on a USB drive or a trusted cloud storage service.</li>
+      <li>After important editing sessions, download a fresh copy. Use clear names or dates for versions.</li>
+      <li>Do not rename the file extension or delete older backups until you have checked the new file.</li>
+      <li>To continue later, use <strong>Open</strong> in Atlas and select your saved project file.</li>
+    </ul>
+  </div>
+  <div class="dialog-actions">
+    <button type="button" class="btn" data-close="saveWarningDialog">Cancel</button>
+    <button type="button" class="btn btn-primary" id="confirmSaveBtn">I understand — Save project file</button>
+  </div>
+</dialog>
+
 <dialog id="canvasSizeDialog" class="app-dialog">
   <form id="canvasSizeForm">
     <div class="dialog-heading">

@@ -1053,7 +1053,7 @@ function makeProjectFile() {
   };
 }
 
-$("saveBtn").addEventListener("click", () => {
+function downloadAtlasProject() {
   const blob = new Blob([JSON.stringify(makeProjectFile(), null, 2)], {
     type: "application/json"
   });
@@ -1061,9 +1061,21 @@ $("saveBtn").addEventListener("click", () => {
   const a = document.createElement("a");
   a.href = url;
   a.download = `${safeFilename(state.projectName)}.atlas.json`;
+  document.body.appendChild(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showToast("Atlas saved.");
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  showToast("Project file download started. Keep a backup copy!");
+}
+
+$("saveBtn").addEventListener("click", () => {
+  const warning = $("saveWarningDialog");
+  if (warning && !warning.open) warning.showModal();
+});
+
+$("confirmSaveBtn")?.addEventListener("click", () => {
+  $("saveWarningDialog")?.close();
+  downloadAtlasProject();
 });
 
 $("openBtn").addEventListener("click", () => $("fileInput").click());
